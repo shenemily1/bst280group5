@@ -35,25 +35,25 @@ all(colnames(normalized_exp) == rownames(pheno))
 
 pheno<-as.data.frame(pheno)
 # Make an ExpressionSet
-eset <- ExpressionSet(assayData= normalized_exp, phenoData=AnnotatedDataFrame(pheno))
-eset
+eset_tcga <- ExpressionSet(assayData= normalized_exp, phenoData=AnnotatedDataFrame(pheno))
+eset_tcga
 ```
 
 Adding more information to the eset: a normalized expression matrix, and the chromosome location for each gene.
 
 ```{r}
 # CPM (counts per million) normalization - counts scaled by the total number of reads
-cpm <- apply(exprs(eset),2, function(x) x/sum(x)*10^6)
+cpm <- apply(exprs(eset_tcga),2, function(x) x/sum(x)*10^6)
 log_cpm <- log2(cpm+1)
 
-storageMode(eset) <- "environment"
-assayData(eset)[["log_cpm"]] <- log_cpm
+storageMode(eset_tcga) <- "environment"
+assayData(eset_tcga)[["log_cpm"]] <- log_cpm
 ```
 
 Extracting chromosome location using bioMart
 
 ```{r}
-genes <- featureNames(eset)
+genes <- featureNames(eset_tcga)
 genes_clean <- sub("\\..*", "", genes)
 
 # 2. Connect to Ensembl (use appropriate version if needed)
@@ -80,8 +80,8 @@ head(chr)
 Add features with chromosome names to eset
 
 ```{r}
-featureData(eset) <- AnnotatedDataFrame(as.data.frame(chr))
-eset
+featureData(eset_tcga) <- AnnotatedDataFrame(as.data.frame(chr))
+eset_tcga
 ```
 
 ## 2. For GTEx files
@@ -97,14 +97,28 @@ purl("load_gtex.Rmd", output = "load_gtex.R")
 source("load_gtex.R")
 ```
 
-And then for making eset just use the code above but change the names accordingly :D
+```{r}
+# Convert matrix to data.frame first
+pheno_gtex <- as.data.frame(clinical[match(colnames(normalized_exp_gtex),rownames(clinical_gtex)),])
+all(colnames(normalized_exp_gtex) == rownames(pheno_gtex))
+
+pheno<-as.data.frame(pheno_gtex)
+# Make an ExpressionSet
+eset_gtex <- ExpressionSet(assayData= normalized_exp_gtex, phenoData=AnnotatedDataFrame(pheno_gtex))
+eset_gtex
+```
+
 
 ## Sample PCA for TCGA before batch correction
 
 ```{r}
 library(ggfortify)
-myPCA <- prcomp(t(assayData(eset)[["log_cpm"]]))
-autoplot(myPCA, data=pData(eset), color="tcga.cgc_case_tumor_status", main="Before batch correction")
+
+filtered_eset<-readRDS("filtered_eset.rds")
+
+myPCA <- prcomp(t(assayData(filtered_eset)[["log_tpm"]]))
+
+autoplot(PCA_filter_prebatch, data=pData(filtered_eset), color="dataset", main="Before batch correction")
 ```
 
 ## PCA after batch correction
@@ -124,3 +138,26 @@ exp_batchRem <- removeBatchEffect(exp_clean, batch = data_clean)
 myPCA2 <- prcomp(t(exp_batchRem))
 autoplot(myPCA2, data=pheno_clean, colour="tcga.cgc_case_tumor_status", main="After batch correction")
 ```
+
+## DE
+
+```{r}
+library(limma)
+# Design
+group <- factor(pData(filtered_eset)$dataset, levels = c("TCGA_LUAD", "GTEx_LUNG"))
+design <- model.matrix(~ group)
+
+#use limma-voom
+voom_out <- voom(assayData(filtered_eset)[["counts"]], design)
+fit <- lmFit(voom_out, design)
+fit <- eBayes(fit)
+res <- topTable(fit, coef = "groupGTEx_LUNG", number = Inf)
+
+# Filter DE genes for GSEA
+de_genes <- res[res$adj.P.Val < 0.05, ]
+de_gene_list <- rownames(de_genes)
+
+saveRDS(de_gene_list, file = "de_gene_list.rds")
+```
+
+
