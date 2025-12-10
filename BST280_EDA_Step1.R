@@ -3,7 +3,12 @@ library(Biobase)
 library(limma)
 library(biomaRt)
 library(ggfortify)
+install.packages("biomaRt")
 
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("biomaRt")
 
 list.files("data")
 
@@ -47,65 +52,65 @@ eset_gtex_lung <- ExpressionSet(
 #We will extract exprs, assayData, pData(clinical data) and fData(gene annotation)
 #We will then find overlaping columns and combine these two dataset by outer join
 #We will duplicate the new individual eset files first
-eset2_luad <- eset_luad
-eset2_gtex_lung <- eset_gtex_lung
-expr_luad     <- exprs(eset_luad)
-expr_gtex     <- exprs(eset_gtex_lung)
-counts_luad   <- assayData(eset_luad)$counts
-counts_gtex   <- assayData(eset_gtex_lung)$counts
-logtpm_luad   <- assayData(eset_luad)$log_tpm
-logtpm_gtex   <- assayData(eset_gtex_lung)$log_tpm
-pdata_luad    <- pData(eset_luad)
-pdata_gtex    <- pData(eset_gtex_lung)
-fdata_luad    <- fData(eset_luad)
-fdata_gtex    <- fData(eset_gtex_lung)
+eset_luad_H  <- eset_luad
+eset_gtex_H  <- eset_gtex_lung
+mat_expr_luad   <- exprs(eset_luad)
+mat_expr_gtex   <- exprs(eset_gtex_lung)
+mat_counts_luad <- assayData(eset_luad)$counts
+mat_counts_gtex <- assayData(eset_gtex_lung)$counts
+mat_logtpm_luad <- assayData(eset_luad)$log_tpm
+mat_logtpm_gtex <- assayData(eset_gtex_lung)$log_tpm
+pd_luad <- pData(eset_luad)
+pd_gtex <- pData(eset_gtex_lung)
+fd_luad <- fData(eset_luad)
+fd_gtex <- fData(eset_gtex_lung)
 
 #Find intersect fData and manipulate individual eset accordingly
-common_f_cols <- intersect(colnames(fdata_luad), colnames(fdata_gtex))
-unique_luad   <- setdiff(colnames(fdata_luad), colnames(fdata_gtex))
-unique_gtex   <- setdiff(colnames(fdata_gtex), colnames(fdata_luad))
-for (col in unique_luad) {fdata_gtex[[col]] <- NA}
-for (col in unique_gtex) {fdata_luad[[col]] <- NA}
-fdata_luad <- fdata_luad[, sort(colnames(fdata_luad))]
-fdata_gtex <- fdata_gtex[, sort(colnames(fdata_gtex))]
-fData(eset2_luad)      <- fdata_luad
-fData(eset2_gtex_lung) <- fdata_gtex
+common_fd_cols <- intersect(colnames(fd_luad), colnames(fd_gtex))
+unique_fd_luad <- setdiff(colnames(fd_luad), colnames(fd_gtex))
+unique_fd_gtex <- setdiff(colnames(fd_gtex), colnames(fd_luad))
+for (col in unique_fd_luad) fd_gtex[[col]] <- NA
+for (col in unique_fd_gtex) fd_luad[[col]] <- NA
+fd_luad <- fd_luad[, sort(colnames(fd_luad))]
+fd_gtex <- fd_gtex[, sort(colnames(fd_gtex))]
+fData(eset_luad_H) <- fd_luad
+fData(eset_gtex_H) <- fd_gtex
 
 #Find intersect pData and manipulate individual eset accordingly
-common_p_cols <- intersect(colnames(pdata_luad), colnames(pdata_gtex))
-unique_luad_p <- setdiff(colnames(pdata_luad), colnames(pdata_gtex))
-unique_gtex_p <- setdiff(colnames(pdata_gtex), colnames(pdata_luad))
-for (col in unique_luad_p) {pdata_gtex[[col]] <- NA}
-for (col in unique_gtex_p) {pdata_luad[[col]] <- NA}
-pdata_luad <- pdata_luad[, sort(colnames(pdata_luad))]
-pdata_gtex <- pdata_gtex[, sort(colnames(pdata_gtex))]
-pData(eset2_luad)      <- pdata_luad
-pData(eset2_gtex_lung) <- pdata_gtex
+common_pd_cols <- intersect(colnames(pd_luad), colnames(pd_gtex))
+unique_pd_luad <- setdiff(colnames(pd_luad), colnames(pd_gtex))
+unique_pd_gtex <- setdiff(colnames(pd_gtex), colnames(pd_luad))
+for (col in unique_pd_luad) pd_gtex[[col]] <- NA
+for (col in unique_pd_gtex) pd_luad[[col]] <- NA
+pd_luad <- pd_luad[, sort(colnames(pd_luad))]
+pd_gtex <- pd_gtex[, sort(colnames(pd_gtex))]
+pData(eset_luad_H) <- pd_luad
+pData(eset_gtex_H) <- pd_gtex
 
 #find interecting expressed gene and subset the eset files 
-common_genes <- intersect(rownames(eset_luad), rownames(eset_gtex_lung))
-eset3_luad      <- eset2_luad[common_genes, ]
-eset3_gtex_lung <- eset2_gtex_lung[common_genes, ]
+common_genes <- intersect(rownames(eset_luad_H), rownames(eset_gtex_H))
+esetH_luad <- eset_luad_H[common_genes, ]
+esetH_gtex <- eset_gtex_H[common_genes, ]
 
 #combine the assayData, pdata, fdata into a new combined dataset
-expr_combined <- cbind(exprs(eset3_luad), exprs(eset3_gtex_lung))
-counts_combined <- cbind(assayData(eset3_luad)$counts, assayData(eset3_gtex_lung)$counts)
-logtpm_combined <- cbind(assayData(eset3_luad)$log_tpm,assayData(eset3_gtex_lung)$log_tpm)
-pData(eset2_luad)$dataset      <- "tcga_luad"
-pData(eset2_gtex_lung)$dataset <- "gtex_lung"
-pdata_combined <- rbind(pData(eset2_luad),pData(eset2_gtex_lung))
-fdata_combined <- fData(eset2_luad) #fData should be the same for luad and lung now 
-
+mat_expr_combined <- cbind(exprs(esetH_luad), exprs(esetH_gtex))
+mat_counts_combined <- cbind(assayData(esetH_luad)$counts,assayData(esetH_gtex)$counts)
+mat_logtpm_combined <- cbind(assayData(esetH_luad)$log_tpm,assayData(esetH_gtex)$log_tpm)
+pData(esetH_luad)$dataset <- "TCGA_LUAD"
+pData(esetH_gtex)$dataset <- "GTEx_LUNG"
+pd_combined <- rbind(pData(esetH_luad), pData(esetH_gtex))
+fd_combined <- fData(esetH_luad)
 
 combined_eset <- ExpressionSet(
   assayData = assayDataNew(
-    exprs   = expr_combined,
-    counts  = counts_combined,
-    log_tpm = logtpm_combined
+    exprs   = mat_expr_combined,
+    counts  = mat_counts_combined,
+    log_tpm = mat_logtpm_combined
   ),
-  phenoData   = AnnotatedDataFrame(pdata_combined),
-  featureData = AnnotatedDataFrame(fdata_combined)
+  phenoData   = AnnotatedDataFrame(pd_combined),
+  featureData = AnnotatedDataFrame(fd_combined)
 )
+
 validObject(combined_eset)
 
 #Create counts per million assayData element 'tpm' and filter accordingly
