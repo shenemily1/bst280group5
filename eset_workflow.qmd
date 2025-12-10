@@ -1,0 +1,126 @@
+---
+title: "test code"
+format: html
+editor: visual
+---
+
+## 1. For TCGA files
+
+All code was from the 02_expressionSet_example.Rmd file in the class introduction R canvas folder in the posit cloud. The workflow was just adapted for TCGA files instead of the txt files that they used to demo.
+
+Loading TCGA file
+
+```{r}
+# run the load data rmd they provided that i adapted for TCGA
+library(knitr)
+
+# Extract R code from the Rmd to a .R file
+purl("load_TCGA.Rmd", output = "load_TCGA.R")
+
+# Source the extracted R script
+source("load_TCGA.R")
+```
+
+Constructing an expressionset from TCGA files
+
+```{r}
+library(Biobase)
+library(limma)
+library(biomaRt)
+library(ggfortify)
+
+# Convert matrix to data.frame first
+pheno <- clinical[match(colnames(normalized_exp),rownames(clinical)),]
+all(colnames(normalized_exp) == rownames(pheno))
+
+pheno<-as.data.frame(pheno)
+# Make an ExpressionSet
+eset <- ExpressionSet(assayData= normalized_exp, phenoData=AnnotatedDataFrame(pheno))
+eset
+```
+
+Adding more information to the eset: a normalized expression matrix, and the chromosome location for each gene.
+
+```{r}
+# CPM (counts per million) normalization - counts scaled by the total number of reads
+cpm <- apply(exprs(eset),2, function(x) x/sum(x)*10^6)
+log_cpm <- log2(cpm+1)
+
+storageMode(eset) <- "environment"
+assayData(eset)[["log_cpm"]] <- log_cpm
+```
+
+Extracting chromosome location using bioMart
+
+```{r}
+genes <- featureNames(eset)
+genes_clean <- sub("\\..*", "", genes)
+
+# 2. Connect to Ensembl (use appropriate version if needed)
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+# 3. Get gene mappings
+gene_mapping <- getBM(
+  attributes = c("ensembl_gene_id", "hgnc_symbol"),
+  filters = "ensembl_gene_id",
+  values = genes_clean,
+  mart = ensembl
+)
+
+annot <- read.delim("class_IntroductionR_canvas/biomart_annotation_expressionSetTutorial.txt",stringsAsFactors = F)
+
+head(annot)
+```
+
+```{r}
+chr <- annot[match(gene_mapping$hgnc_symbol, annot$hgnc_symbol), "chromosome_name"]
+head(chr)
+```
+
+Add features with chromosome names to eset
+
+```{r}
+featureData(eset) <- AnnotatedDataFrame(as.data.frame(chr))
+eset
+```
+
+## 2. For GTEx files
+
+```{r}
+# run the load data rmd they provided that i adapted for TCGA
+library(knitr)
+
+# Extract R code from the Rmd to a .R file
+purl("load_gtex.Rmd", output = "load_gtex.R")
+
+# Source the extracted R script
+source("load_gtex.R")
+```
+
+And then for making eset just use the code above but change the names accordingly :D
+
+## Sample PCA for TCGA before batch correction
+
+```{r}
+library(ggfortify)
+myPCA <- prcomp(t(assayData(eset)[["log_cpm"]]))
+autoplot(myPCA, data=pData(eset), color="tcga.cgc_case_tumor_status", main="Before batch correction")
+```
+
+## PCA after batch correction
+
+```{r}
+Platform <- pData(eset)$tcga.cgc_case_tumor_status
+
+valid_samples <- !is.na(Platform)
+
+exp_clean <- assayData(eset)[["log_cpm"]][, valid_samples]
+data_clean <- Platform[valid_samples]
+pheno_clean <- pData(eset)[valid_samples, ]
+
+exp_batchRem <- removeBatchEffect(exp_clean, batch = data_clean)
+
+# exp_batchRem <- removeBatchEffect(assayData(eset)[["log_cpm"]], batch=Platform)
+myPCA2 <- prcomp(t(exp_batchRem))
+autoplot(myPCA2, data=pheno_clean, colour="tcga.cgc_case_tumor_status", main="After batch correction")
+```
