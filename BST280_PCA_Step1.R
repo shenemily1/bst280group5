@@ -34,7 +34,7 @@ legend("topright", legend = levels(as.factor(study)),
        col = 1:length(levels(as.factor(study))), pch = 19)
 
 saveRDS(filtered_eset, file = "luad_gtex_eset_1207.rds")
-
+##
 filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
 study <- pData(filtered_eset)$dataset 
 PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["norm_logtpm"]]))
