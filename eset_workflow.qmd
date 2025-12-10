@@ -139,25 +139,72 @@ myPCA2 <- prcomp(t(exp_batchRem))
 autoplot(myPCA2, data=pheno_clean, colour="tcga.cgc_case_tumor_status", main="After batch correction")
 ```
 
-## DE
-
+##DE with deseq2
 ```{r}
-library(limma)
-# Design
-group <- factor(pData(filtered_eset)$dataset, levels = c("TCGA_LUAD", "GTEx_LUNG"))
-design <- model.matrix(~ group)
+library(DESeq2)
+# Raw counts matrix
+counts_mat <- assayData(filtered_eset)[["counts"]]
 
-#use limma-voom
-voom_out <- voom(assayData(filtered_eset)[["counts"]], design)
-fit <- lmFit(voom_out, design)
-fit <- eBayes(fit)
-res <- topTable(fit, coef = "groupGTEx_LUNG", number = Inf)
+# Make sure counts are integers (DESeq2 requires integers)
+counts_mat <- round(counts_mat)
 
-# Filter DE genes for GSEA
-de_genes <- res[res$adj.P.Val < 0.05, ]
-de_gene_list <- rownames(de_genes)
+# Sample information
+colData <- pData(filtered_eset)
 
-saveRDS(de_gene_list, file = "de_gene_list.rds")
+# Optional: subset or rename columns to use in the design
+# For example, comparing TCGA vs GTEx
+colData$group <- factor(colData$dataset)
 ```
 
+create DDS dataset
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts_mat,
+  colData   = colData,
+  design    = ~ group   # replace 'group' with your variable of interest
+)
 
+#filter low count genes
+dds <- dds[rowSums(counts(dds)) > 1, ]
+
+# run deseq
+dds <- DESeq(dds)
+```
+
+```{r}
+# Default contrast: second level vs first level
+res <- results(dds)
+
+# If you want a specific contrast (e.g., GTEx vs TCGA)
+res <- results(dds, contrast = c("group", "GTEx_LUNG", "TCGA_LUAD"))
+
+# Check the variables in the model
+resultsNames(dds)
+```
+
+```{r}
+# Remove NA padj
+res_filt <- res[!is.na(res$padj),]
+
+# Genes upregulated in GTEx
+res_up <- res_filt[res_filt$padj < 0.01 & res_filt$log2FoldChange > 1, ]
+# Genes downregulated in GTEx (or up in TCGA)
+res_down <- res_filt[res_filt$padj < 0.01 & res_filt$log2FoldChange < -1, ]
+```
+
+top 200 genes
+```{r}
+# Top 200 upregulated
+top_up <- res_up[order(res_up$log2FoldChange, decreasing = TRUE), ]
+top_up <- head(top_up, 200)
+write.table(rownames(top_up), "top_up_genes.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+# Top 200 downregulated
+top_down <- res_down[order(res_down$log2FoldChange), ]
+top_down <- head(top_down, 200)
+write.table(rownames(top_down), "top_down_genes.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+saveRDS(top_down, "top_down.rds")
+saveRDS(top_up, "top_up.rds")
+
+```
