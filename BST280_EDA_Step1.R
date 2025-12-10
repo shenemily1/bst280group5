@@ -120,9 +120,14 @@ counts_luad <- assayData(eset_luad)$counts
 counts_gtex <- assayData(eset_gtex_lung)$counts
 tpm_luad <- 2^(assayData(eset_luad)$log_tpm) - 1
 tpm_gtex <- 2^(assayData(eset_gtex_lung)$log_tpm) - 1
-counts_all <- cbind(counts_luad, counts_gtex)
-tpm_all    <- cbind(tpm_luad, tpm_gtex)
-tpm_filter <- rowMeans(tpm_all > 1) >= 0.20
+common_genes <- intersect(rownames(counts_luad), rownames(counts_gtex))
+counts_luad2 <- counts_luad[common_genes, ]
+counts_gtex2 <- counts_gtex[common_genes, ]
+tpm_luad2 <- tpm_luad[common_genes, ]
+tpm_gtex2 <- tpm_gtex[common_genes, ]
+counts_all <- cbind(counts_luad2, counts_gtex2)
+tpm_all    <- cbind(tpm_luad2,   tpm_gtex2)
+tpm_filter   <- rowMeans(tpm_all > 1) >= 0.20
 count_filter <- rowMeans(counts_all > 10) >= 0.50
 keep_genes <- tpm_filter & count_filter
 sum(keep_genes)
