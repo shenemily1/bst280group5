@@ -1,0 +1,47 @@
+---
+title: "Accessing the data"
+output: html_document
+---
+
+# Follow this script to access the curated data for the final project.  
+#The data for tumor tissues were obtained from the TCGA project, while those for non-diseased tissue sites were obtained from the GTEx project.  
+#Each tissue type (normal or tumor) has its data saved separately as ".rds" files. These ".rds" files include gene expression (raw gene counts and normalized gene expression), clinical information, and gene annotation details.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Load packages
+```{r message=FALSE}
+library(SummarizedExperiment)
+```
+
+## Load data
+```{r}
+# List all data files
+list.files("data")
+# Let's look the colon cancer data
+obj <- readRDS("data/tcga_luad.rds")
+obj
+```
+
+## Gene expression data
+```{r}
+#To access the "raw_counts" assay, use the assay function:
+raw_counts <- assay(obj,"raw_counts")
+#To access the normalized gene expression (TPM and log transformed), use the assay function:
+normalized_exp <- assay(obj,"logtpm")
+```
+
+## Clinical information
+```{r}
+# To access the colData, which contains information about the columns (samples), use the colData function:
+clinical <- colData(obj)
+```
+
+## Gene annotation information
+```{r}
+# To access the rowData, which contains information about the rows (genes), use the rowData function:
+gene_annot <- rowData(obj)
+```
