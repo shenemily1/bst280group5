@@ -6,10 +6,10 @@ folder_drib <- drive_get(as_id(folder_url))
 files_list <- drive_ls(folder_drib)
 
 # Download each file into data/
-for (i in seq_len(nrow(files))) {
+for (i in seq_len(nrow(files_list))) {
   drive_download(
-    file = files$id[i],
-    path = file.path("data", files$name[i]),
+    file = files_list$id[i],
+    path = file.path("data", files_list$name[i]),
     overwrite = TRUE
   )
 }
