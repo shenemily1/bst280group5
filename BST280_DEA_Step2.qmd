@@ -14,15 +14,18 @@ editor: visual
 #    install.packages("BiocManager")
 #BiocManager::install("rnaseqGene", version = "3.8")
 #BiocManager::install("DESeq2")
-#BiocManager::install("vsn")
-#BiocManager::install("apeglm")
-library("DESeq2") # for RNA-seq analysis
-library("dplyr") # for data processing
-library("magrittr")
-library("apeglm") # Used by DESeq2 to fit a linear model
-library("ggplot2") # for visualization
-library("vsn") # for variance stabilization
-library("hexbin") # for visualization
+library(DESeq2) # for RNA-seq analysis
+library(dplyr) # for data processing
+library(magrittr)
+library(apeglm) # Used by DESeq2 to fit a linear model
+library(ggplot2) # for visualization
+library(vsn) # for variance stabilization
+library(hexbin) # for visualization
+#BiocManager::install("edgeR")
+library(edgeR)
+library(gplots)
+library(Biobase)
+library(limma)
 
 #Load
 filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
@@ -135,8 +138,8 @@ nrow(dds)
 ```{r, warning=FALSE, message=FALSE}
 lambda <- 10^seq(from = -1, to = 2, length = 1000)
 cts <- matrix(rpois(1000*100, lambda), ncol = 100)
-#library("vsn") # for variance stabilization
-#library("hexbin") # for visualization
+library("vsn") # for variance stabilization
+library("hexbin") # for visualization
 meanSdPlot(cts, ranks = FALSE)
 log.cts.one <- log2(cts + 1)
 meanSdPlot(log.cts.one, ranks = FALSE)
@@ -210,28 +213,28 @@ plotMA(res.noshr, ylim = c(-5, 5))
 
 ```{r}
 resultsNames(dds)
-res <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
-plotMA(res, ylim = c(-5, 5))
+res_shrunk <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
+plotMA(res_shrunk, ylim = c(-5, 5))
 ```
 
 ```{r}
-plotMA(res, ylim = c(-5,5))
-topGene <- rownames(res)[which.min(res$padj)]
-with(res[topGene, ], {
+plotMA(res_shrunk, ylim = c(-5,5))
+topGene <- rownames(res_shrunk)[which.min(res_shrunk$padj)]
+with(res_shrunk[topGene, ], {
   points(baseMean, log2FoldChange, col="dodgerblue", cex=2, lwd=2)
   text(baseMean, log2FoldChange, topGene, pos=2, col="dodgerblue")
 })
 ```
 
 ```{r}
-hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
+hist(res$pvalue[res_shrunk$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white",main='P-value histogram')
 ```
 
 ## Save results
 
 ```{r}
-de_genes <- rownames(res)[ which(res$padj < 0.05 & !is.na(res$padj)) ]
+de_genes <- rownames(res)[ which(res$padj < 0.1 & !is.na(res$padj)) ]
 length(de_genes)
 
 de_eset <- filtered_eset[de_genes, ]
@@ -248,27 +251,26 @@ saveRDS(de_eset, file = "data/DE_genes_only_eset_DESeq2.rds")
 ## Analysis
 
 ```{r, warning=FALSE, message=FALSE}
-logcpm_bc <- assayData(filtered_eset)$norm_logtpm  # batch-corrected log-TPM/log-CPM
-coldata <- pData(filtered_eset)
 
-# same filtered samples 
-# vars_for_design <- c("sex", "age_bin", "group")
-# keep <- complete.cases(coldata[, vars_for_design])
-logcpm_bc_filt <- logcpm_bc[, keep]
-# coldata_filt   <- coldata[keep, ]
+countdata_filt <- countdata[, keep]
+coldata_filt   <- coldata[keep, ]
+group          <- coldata_filt$group
 
-library(limma)
+y <- DGEList(counts = countdata_filt)
+# filtering (similar to DESeq2)
+keep_genes2 <- filterByExpr(y, group = group)
+y <- y[keep_genes2, , keep.lib.sizes = FALSE]
+y <- calcNormFactors(y)
 
 design_limma <- model.matrix(~ sex + age_bin + group, data = coldata_filt)
-#design_limma <- model.matrix(~ group, data = coldata_filt)
-
 ```
 
 ```{r}
-fit_limma <- lmFit(logcpm_bc_filt, design_limma)
+v <- voom(y, design_limma, plot = TRUE)
+fit_limma <- lmFit(v, design_limma)
 fit_limma <- eBayes(fit_limma)
 
-res_limma <- topTable(fit_limma, coef="grouptumor", number=Inf)
+res_limma <- topTable(fit_limma, coef = "grouptumor", number = Inf)
 
 # coefficient for tumor vs normal will be the "group" term
 topTable(fit_limma, coef = "grouptumor", n = 20)  # adjust coef name to match
@@ -314,10 +316,11 @@ plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab
 ```
 
 ```{r, message=FALSE, warning=FALSE}
-library(gplots)
 
 # Heatmap with top 20 differentially expressed genes
-mat <- logcpm_bc_filt[rownames(res_limma)[1:20],]
+top_genes <- rownames(res_limma)[1:20]
+mat <- v$E[top_genes, ]
+
 # Create color bar with group information
 cols <- coldata_filt$group
 heatmapColColors <- c("blue", "red")[factor(cols)]
@@ -382,4 +385,17 @@ res_limma_sig$gene_id     <- rownames(res_limma_sig)
 res_limma_sig$gene_symbol <- feat[res_limma_sig$gene_id, "gene_name"]  
 
 saveRDS(res_limma_sig, file = "data/DE_genes_limma.rds")
+```
+
+# Compare results
+
+```{r}
+sig_deseq <- res[de_genes, ]
+
+common_genes <- intersect(rownames(sig_deseq), rownames(res_limma_sig))
+length(common_genes)
+
+cor(sig_deseq[common_genes, "log2FoldChange"],
+    res_limma_sig[common_genes, "logFC"],
+    use = "complete.obs")
 ```
