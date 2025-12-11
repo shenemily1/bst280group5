@@ -35,25 +35,25 @@ all(colnames(normalized_exp) == rownames(pheno))
 
 pheno<-as.data.frame(pheno)
 # Make an ExpressionSet
-eset <- ExpressionSet(assayData= normalized_exp, phenoData=AnnotatedDataFrame(pheno))
-eset
+eset_tcga <- ExpressionSet(assayData= normalized_exp, phenoData=AnnotatedDataFrame(pheno))
+eset_tcga
 ```
 
 Adding more information to the eset: a normalized expression matrix, and the chromosome location for each gene.
 
 ```{r}
 # CPM (counts per million) normalization - counts scaled by the total number of reads
-cpm <- apply(exprs(eset),2, function(x) x/sum(x)*10^6)
+cpm <- apply(exprs(eset_tcga),2, function(x) x/sum(x)*10^6)
 log_cpm <- log2(cpm+1)
 
-storageMode(eset) <- "environment"
-assayData(eset)[["log_cpm"]] <- log_cpm
+storageMode(eset_tcga) <- "environment"
+assayData(eset_tcga)[["log_cpm"]] <- log_cpm
 ```
 
 Extracting chromosome location using bioMart
 
 ```{r}
-genes <- featureNames(eset)
+genes <- featureNames(eset_tcga)
 genes_clean <- sub("\\..*", "", genes)
 
 # 2. Connect to Ensembl (use appropriate version if needed)
@@ -80,8 +80,8 @@ head(chr)
 Add features with chromosome names to eset
 
 ```{r}
-featureData(eset) <- AnnotatedDataFrame(as.data.frame(chr))
-eset
+featureData(eset_tcga) <- AnnotatedDataFrame(as.data.frame(chr))
+eset_tcga
 ```
 
 ## 2. For GTEx files
@@ -97,14 +97,28 @@ purl("load_gtex.Rmd", output = "load_gtex.R")
 source("load_gtex.R")
 ```
 
-And then for making eset just use the code above but change the names accordingly :D
+```{r}
+# Convert matrix to data.frame first
+pheno_gtex <- as.data.frame(clinical[match(colnames(normalized_exp_gtex),rownames(clinical_gtex)),])
+all(colnames(normalized_exp_gtex) == rownames(pheno_gtex))
+
+pheno<-as.data.frame(pheno_gtex)
+# Make an ExpressionSet
+eset_gtex <- ExpressionSet(assayData= normalized_exp_gtex, phenoData=AnnotatedDataFrame(pheno_gtex))
+eset_gtex
+```
+
 
 ## Sample PCA for TCGA before batch correction
 
 ```{r}
 library(ggfortify)
-myPCA <- prcomp(t(assayData(eset)[["log_cpm"]]))
-autoplot(myPCA, data=pData(eset), color="tcga.cgc_case_tumor_status", main="Before batch correction")
+
+filtered_eset<-readRDS("filtered_eset.rds")
+
+myPCA <- prcomp(t(assayData(filtered_eset)[["log_tpm"]]))
+
+autoplot(PCA_filter_prebatch, data=pData(filtered_eset), color="dataset", main="Before batch correction")
 ```
 
 ## PCA after batch correction
@@ -123,4 +137,74 @@ exp_batchRem <- removeBatchEffect(exp_clean, batch = data_clean)
 # exp_batchRem <- removeBatchEffect(assayData(eset)[["log_cpm"]], batch=Platform)
 myPCA2 <- prcomp(t(exp_batchRem))
 autoplot(myPCA2, data=pheno_clean, colour="tcga.cgc_case_tumor_status", main="After batch correction")
+```
+
+##DE with deseq2
+```{r}
+library(DESeq2)
+# Raw counts matrix
+counts_mat <- assayData(filtered_eset)[["counts"]]
+
+# Make sure counts are integers (DESeq2 requires integers)
+counts_mat <- round(counts_mat)
+
+# Sample information
+colData <- pData(filtered_eset)
+
+# Optional: subset or rename columns to use in the design
+# For example, comparing TCGA vs GTEx
+colData$group <- factor(colData$dataset)
+```
+
+create DDS dataset
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts_mat,
+  colData   = colData,
+  design    = ~ group   # replace 'group' with your variable of interest
+)
+
+#filter low count genes
+dds <- dds[rowSums(counts(dds)) > 1, ]
+
+# run deseq
+dds <- DESeq(dds)
+```
+
+```{r}
+# Default contrast: second level vs first level
+res <- results(dds)
+
+# If you want a specific contrast (e.g., GTEx vs TCGA)
+res <- results(dds, contrast = c("group", "GTEx_LUNG", "TCGA_LUAD"))
+
+# Check the variables in the model
+resultsNames(dds)
+```
+
+```{r}
+# Remove NA padj
+res_filt <- res[!is.na(res$padj),]
+
+# Genes upregulated in GTEx
+res_up <- res_filt[res_filt$padj < 0.01 & res_filt$log2FoldChange > 1, ]
+# Genes downregulated in GTEx (or up in TCGA)
+res_down <- res_filt[res_filt$padj < 0.01 & res_filt$log2FoldChange < -1, ]
+```
+
+top 200 genes
+```{r}
+# Top 200 upregulated
+top_up <- res_up[order(res_up$log2FoldChange, decreasing = TRUE), ]
+top_up <- head(top_up, 200)
+write.table(rownames(top_up), "top_up_genes.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+# Top 200 downregulated
+top_down <- res_down[order(res_down$log2FoldChange), ]
+top_down <- head(top_down, 200)
+write.table(rownames(top_down), "top_down_genes.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+saveRDS(top_down, "top_down.rds")
+saveRDS(top_up, "top_up.rds")
+
 ```
