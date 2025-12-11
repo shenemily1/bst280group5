@@ -111,7 +111,7 @@ table(keep)
 coldata_filt   <- coldata[keep, ]
 countdata_filt <- countdata[, keep]
 
-# (optional but recommended sanity check)
+# sanity check
 stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
 
 dds <- DESeqDataSetFromMatrix(
@@ -399,3 +399,13 @@ cor(sig_deseq[common_genes, "log2FoldChange"],
     res_limma_sig[common_genes, "logFC"],
     use = "complete.obs")
 ```
+
+# Summary of results
+
+We performed differential expression analysis (DEA) using both DESeq2 and limma-voom, adjusting for age and sex as covariates. Smoking status was excluded because it was available only for tumor samples and not for controls. Both pipelines produced broadly comparable results: a large number of genes were identified as differentially expressed after multiple-testing correction. As expected, applying a more stringent log2​ fold-change threshold resulted in a smaller, more conservative set of significant genes.
+
+Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled.
+
+For this reason, both DESeq2 and limma-voom were run using raw counts rather than batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
+
+Interpretation of the results should therefore be made with caution, as significant findings may partially reflect inter-dataset technical differences rather than true tumor-specific transcriptional changes.
