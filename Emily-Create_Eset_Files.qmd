@@ -108,7 +108,6 @@ eset_gtex <- ExpressionSet(assayData= normalized_exp_gtex, phenoData=AnnotatedDa
 eset_gtex
 ```
 
-
 ## Sample PCA for TCGA before batch correction
 
 ```{r}
@@ -140,6 +139,7 @@ autoplot(myPCA2, data=pheno_clean, colour="tcga.cgc_case_tumor_status", main="Af
 ```
 
 ##DE with deseq2
+
 ```{r}
 library(DESeq2)
 # Raw counts matrix
@@ -157,6 +157,7 @@ colData$group <- factor(colData$dataset)
 ```
 
 create DDS dataset
+
 ```{r}
 dds <- DESeqDataSetFromMatrix(
   countData = counts_mat,
@@ -193,6 +194,7 @@ res_down <- res_filt[res_filt$padj < 0.01 & res_filt$log2FoldChange < -1, ]
 ```
 
 top 200 genes
+
 ```{r}
 # Top 200 upregulated
 top_up <- res_up[order(res_up$log2FoldChange, decreasing = TRUE), ]
