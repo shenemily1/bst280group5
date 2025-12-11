@@ -1,0 +1,385 @@
+---
+title: "BST280_DEA"
+author: "Siwen Wang"
+format: html
+editor: visual
+---
+
+# Load data
+
+## Setup packages and data check
+
+```{r, warning=FALSE, message=FALSE}
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install("rnaseqGene", version = "3.8")
+#BiocManager::install("DESeq2")
+#BiocManager::install("vsn")
+#BiocManager::install("apeglm")
+library("DESeq2") # for RNA-seq analysis
+library("dplyr") # for data processing
+library("magrittr")
+library("apeglm") # Used by DESeq2 to fit a linear model
+library("ggplot2") # for visualization
+library("vsn") # for variance stabilization
+library("hexbin") # for visualization
+
+#Load
+filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
+#investigate
+filtered_eset
+```
+
+```{r}
+# Extract counts and sample metadata
+countdata <- assayData(filtered_eset)$counts   # genes x samples
+coldata   <- pData(filtered_eset)             # samples x variables
+
+# Create a group variable: normal (GTEx) vs tumor (TCGA)
+coldata$group <- ifelse(coldata$dataset == "TCGA_LUAD", "tumor", "normal")
+coldata$group <- factor(coldata$group, levels = c("normal", "tumor"))
+table(coldata$group)
+
+```
+
+## Prepare sex and age variables
+
+```{r}
+#handle covariates - sex
+coldata$sex <- ifelse(
+  !is.na(coldata$gtex.sex), 
+  coldata$gtex.sex, 
+  coldata$tcga.cgc_case_gender
+)
+
+coldata <- as.data.frame(coldata)
+coldata$sex <- as.character(coldata$sex)
+# Recode GTEx: 1 -> MALE, 2 -> FEMALE
+is_gtex <- coldata$dataset == "GTEx_LUNG"
+coldata$sex[is_gtex & coldata$sex %in% c("1", 1)] <- "MALE"
+coldata$sex[is_gtex & coldata$sex %in% c("2", 2)] <- "FEMALE"
+
+coldata$sex <- factor(coldata$sex, levels = c("FEMALE", "MALE"))
+table(coldata$sex, coldata$dataset)
+```
+
+```{r}
+#colnames(pData(filtered_eset)[grep("age", colnames(pData(filtered_eset)), ignore.case = TRUE)])
+#table(coldata$gtex.age)
+#summary(coldata$tcga.cgc_case_age_at_diagnosis)
+
+# TCGA ages (numeric)
+tcga_age <- coldata$tcga.cgc_case_age_at_diagnosis
+
+# Create comparable age categories
+tcga_age_bins <- cut(
+  tcga_age,
+  breaks = c(20, 30, 40, 50, 60, 70, 80, 90),
+  labels = c("20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89"),
+  right = FALSE
+)
+
+# Assign only to TCGA samples
+tcga_age_bins[ coldata$dataset != "TCGA_LUAD" ] <- NA
+
+coldata$age_bin <- ifelse(
+  coldata$dataset == "GTEx_LUNG",
+  coldata$gtex.age,
+  as.character(tcga_age_bins)
+)
+
+coldata$age_bin <- factor(coldata$age_bin,
+                          levels = c("20-29","30-39","40-49","50-59","60-69","70-79", "80-89"))
+table(coldata$age_bin, coldata$dataset)
+```
+
+```{r}
+table(coldata$dataset, is.na(coldata$sex))
+table(coldata$dataset, is.na(coldata$age_bin))
+```
+
+```{r, message=FALSE}
+# drop 20 samples with missing covariates
+vars_for_design <- c("sex", "age_bin", "group")
+
+keep <- complete.cases(coldata[, vars_for_design])
+table(keep)  
+
+coldata_filt   <- coldata[keep, ]
+countdata_filt <- countdata[, keep]
+
+# (optional but recommended sanity check)
+stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
+
+dds <- DESeqDataSetFromMatrix(
+  countData = round(countdata_filt),
+  colData   = coldata_filt,         
+  design    = ~ sex + age_bin + group
+)
+
+dds
+nrow(dds)
+
+```
+
+# DESeq2
+
+## Pre-filtering datasets
+
+```{r}
+#rows with 2 or more counts across all samples
+dds <- dds[ rowSums(counts(dds)) > 1, ]
+nrow(dds)
+```
+
+```{r, warning=FALSE, message=FALSE}
+lambda <- 10^seq(from = -1, to = 2, length = 1000)
+cts <- matrix(rpois(1000*100, lambda), ncol = 100)
+#library("vsn") # for variance stabilization
+#library("hexbin") # for visualization
+meanSdPlot(cts, ranks = FALSE)
+log.cts.one <- log2(cts + 1)
+meanSdPlot(log.cts.one, ranks = FALSE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+#Use the variance stabilizing transformation (VST) for count data that stabilize the variance across the mean: 
+vsd <- vst(dds, blind = FALSE)
+head(assay(vsd), 3)
+
+dds <- estimateSizeFactors(dds)
+
+df <- bind_rows(
+  as_data_frame(log2(counts(dds, normalized=TRUE)[, 1:2]+1)) %>%
+         mutate(transformation = "log2(x + 1)"),
+  as_data_frame(assay(vsd)[, 1:2]) %>% mutate(transformation = "vst"))
+  
+colnames(df)[1:2] <- c("x", "y")  
+ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
+  coord_fixed() + facet_grid( . ~ transformation) 
+```
+
+## Analysis
+
+```{r}
+dds <- DESeq(dds)
+res <- results(dds)
+res
+```
+
+```{r}
+summary(res)
+```
+
+## Summarizing results
+
+```{r}
+#raw results
+sum(res$pvalue < 0.05, na.rm=TRUE)
+sum(!is.na(res$pvalue)) 
+```
+
+```{r}
+#FDR correction
+res.05 <- results(dds, alpha = 0.05)
+table(res.05$padj < 0.05)
+```
+
+```{r}
+#Raise the log2 fold change threshold to 1
+resLFC1 <- results(dds, lfcThreshold=1)
+table(resLFC1$padj < 0.1)
+```
+
+```{r}
+sum(res$padj < 0.1, na.rm=TRUE)
+resSig <- subset(res, padj < 0.1)
+
+#strongest down-regulation
+head(resSig[ order(resSig$log2FoldChange), ])
+#strongest up-regulation
+head(resSig[ order(-resSig$log2FoldChange), ])
+```
+
+## Plotting results
+
+```{r}
+res.noshr <- results(dds, name="group_tumor_vs_normal")
+plotMA(res.noshr, ylim = c(-5, 5))
+```
+
+```{r}
+resultsNames(dds)
+res <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
+plotMA(res, ylim = c(-5, 5))
+```
+
+```{r}
+plotMA(res, ylim = c(-5,5))
+topGene <- rownames(res)[which.min(res$padj)]
+with(res[topGene, ], {
+  points(baseMean, log2FoldChange, col="dodgerblue", cex=2, lwd=2)
+  text(baseMean, log2FoldChange, topGene, pos=2, col="dodgerblue")
+})
+```
+
+```{r}
+hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
+     col = "grey50", border = "white",main='P-value histogram')
+```
+
+## Save results
+
+```{r}
+de_genes <- rownames(res)[ which(res$padj < 0.05 & !is.na(res$padj)) ]
+length(de_genes)
+
+de_eset <- filtered_eset[de_genes, ]
+
+# Add DESeq2 statistics into featureData
+de_stats <- as.data.frame(res[de_genes, ])
+fData(de_eset) <- cbind(fData(de_eset), de_stats)
+
+saveRDS(de_eset, file = "data/DE_genes_only_eset_DESeq2.rds")
+```
+
+# Limma-voom
+
+## Analysis
+
+```{r, warning=FALSE, message=FALSE}
+logcpm_bc <- assayData(filtered_eset)$norm_logtpm  # batch-corrected log-TPM/log-CPM
+coldata <- pData(filtered_eset)
+
+# same filtered samples 
+# vars_for_design <- c("sex", "age_bin", "group")
+# keep <- complete.cases(coldata[, vars_for_design])
+logcpm_bc_filt <- logcpm_bc[, keep]
+# coldata_filt   <- coldata[keep, ]
+
+library(limma)
+
+design_limma <- model.matrix(~ sex + age_bin + group, data = coldata_filt)
+#design_limma <- model.matrix(~ group, data = coldata_filt)
+
+```
+
+```{r}
+fit_limma <- lmFit(logcpm_bc_filt, design_limma)
+fit_limma <- eBayes(fit_limma)
+
+res_limma <- topTable(fit_limma, coef="grouptumor", number=Inf)
+
+# coefficient for tumor vs normal will be the "group" term
+topTable(fit_limma, coef = "grouptumor", n = 20)  # adjust coef name to match
+
+```
+
+## Plot results
+
+```{r}
+plotSA(fit_limma, main="Final model mean-variance trend")
+```
+
+## Plotting results
+
+```{r}
+# Find the number of genes differentially expressed under a defined thereshold (FDR<0.05 and absolute log fold-change greater than 2).
+sum(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2)
+```
+
+```{r}
+# Find the number of genes overexpressed in the cell lines
+sum(res_limma$adj.P.Val < 0.05 & res_limma$logFC > 2)
+```
+
+```{r}
+# Find the number of genes overexpressed in the tissue samples
+sum(res_limma$adj.P.Val < 0.05 & res_limma$logFC < -2)
+```
+
+```{r}
+# Volcano-plot
+# Color genes differentially expressed under a defined thereshold (FDR<0.05 and absolute log fold-change greater than 2).
+sig = ifelse(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2, yes="red",no="black")
+plot(x=res_limma$logFC, y=-log(res_limma$adj.P.Val), xlab="log-fold-change",
+     ylab="-log(FDR)",pch=21,col=sig,bty="l", main="Volcano plot", cex=0.8)
+```
+
+```{r}
+# MA plot
+sig = ifelse(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2, yes="red",no="black")
+plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab="log-fold-change",
+     pch=21,col=sig,bty="l", main="MA plot", cex=0.8)
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(gplots)
+
+# Heatmap with top 20 differentially expressed genes
+mat <- logcpm_bc_filt[rownames(res_limma)[1:20],]
+# Create color bar with group information
+cols <- coldata_filt$group
+heatmapColColors <- c("blue", "red")[factor(cols)]
+# Create a vector for the heatmap color
+heatmapCols = colorRampPalette(c("yellow", "red"))(250)
+# Plot the heatmap and legend
+heatmap.2(
+  mat,
+  trace = "none",
+  ColSideColors = heatmapColColors,
+  col = heatmapCols,
+  labCol = FALSE,
+  margins = c(1, 12),
+  density.info = "none",
+  key.xlab = "expression", 
+  key.title = NA
+)
+
+legend(
+  "topright",
+  legend = levels(factor(cols)),
+  fill = c("blue", "red"),
+  xpd = TRUE,
+  box.lwd = NA
+)
+```
+
+```{r}
+# Replace row names by gene symbol
+feat <- fData(filtered_eset)
+symbol <- feat[rownames(mat), "gene_name"]
+heatmap.2(
+  mat,
+  trace = "none",
+  ColSideColors = heatmapColColors,
+  col = heatmapCols,
+  labCol = FALSE,
+  labRow = symbol,
+  margins = c(1, 12),
+  density.info = "none",
+  key.xlab = "expression",
+  key.title = NA
+)
+
+legend(
+  "topright",
+  legend = unique(cols),
+  fill = unique(heatmapColColors),
+  xpd = TRUE,
+  box.lwd = NA
+)
+```
+
+## Save results
+
+```{r}
+# FDR < 0.1, like with DESeq2
+res_limma_sig <- res_limma[res_limma$adj.P.Val < 0.1, ]
+nrow(res_limma_sig)  
+
+res_limma_sig$gene_id     <- rownames(res_limma_sig)
+res_limma_sig$gene_symbol <- feat[res_limma_sig$gene_id, "gene_name"]  
+
+saveRDS(res_limma_sig, file = "data/DE_genes_limma.rds")
+```

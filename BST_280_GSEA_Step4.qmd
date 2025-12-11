@@ -5,6 +5,7 @@ editor: visual
 ---
 
 ## Load DE genes and packages
+
 ```{r}
 #de gene list from de workflow in eset_workdlow.qmd
 de_list<-readRDS("de_gene_list.rds")
@@ -18,4 +19,3 @@ library(dplyr)
 library(fgsea)
 
 ```
-
