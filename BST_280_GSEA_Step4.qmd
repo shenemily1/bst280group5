@@ -8,14 +8,102 @@ editor: visual
 
 ```{r}
 #de gene list from de workflow in eset_workdlow.qmd
-de_list<-readRDS("de_gene_list.rds")
+de_list<-readRDS("DE_genes_only_eset_DESeq2.rds")
+ensembl_ids <- sub("\\..*", "", featureNames(de_list))
 
-#load packages required for GSEA
-library(ggplot2)
-library(sva)
-library(DESeq2)
-library(tximport)
-library(dplyr)
+write.table(ensembl_ids, "de_list.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+#install packages required for GSEA
+install.packages("BiocManager")
+BiocManager::install("clusterProfiler")
+BiocManager::install("enrichplot")
+
+#load packages
 library(fgsea)
+library(enrichplot)
+library(ggplot2)
+library(DESeq2)
+library(GSEABase)
+library(limma)
+library(Biobase)
+library(stats)
 
 ```
+
+```{r}
+#after running DAVID online
+DAVIDkegg <- read.csv("DAVIDKEGG.csv")
+head(DAVIDkegg[order(DAVIDkegg$Bonferroni),c(1,2,3,5,11,12)])
+
+DAVIDRP <- read.csv("DAVIDREAC.csv")
+head(DAVIDRP[order(DAVIDRP$Bonferroni),c(1,2,3,5,11,12)])
+```
+
+After running DAVID, the genes were compared with the KEGG pathways. The genes were identified to be seemingly enriched in metabolic pathways (including RNA metabolism), disease, and endocytosis pathways.The most significant pathway (p<e-52) was the "Metabolism of RNA" pathway from the Reactome Pathways database. This pathway encompasses RNA processing steps such as capping, splicing, 3'-cleavage, and polyadenylation, as well as mRNA degredation and cleavage that are essential for the transportation and regulation of mature mRNAs in the cell, which are often related to and misregulated in cancer pathology.
+
+## Preprocessing to prepare datasets for GSEA
+From differential expression analysis, a results table of the dds can be obtained. This differential results table codes genes in Ensembl IDs, but fgsea and the KEGG pathways to be compared with uses official gene symbols. Therefore, gene ID conversions need to be done in order to make these datasets comparable. DAVID gene id conversions was used to match Ensembl IDs obtained by DE.
+
+```{r}
+# # Load res from dds obtained in DE
+# dds<-readRDS("dds.rds")
+# dds<-DESeq(dds)
+res<-results(dds)
+saveRDS(res, "res.rds")
+
+# Preprocessing for res
+res_rownames<-sub("\\..*$", "", rownames(res))
+res<-as.matrix(res)
+rownames(res)<-res_rownames
+#write.table(rownames(res), "res.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+# Setting res as matrix for conversion
+res_mat<-as.matrix(res)
+rownames(res_mat) <- resid$OFFICIAL_GENE_SYMBOL[match(rownames(res_mat), resid$Original.ID)]
+res_mat<-res_mat[!is.na(rownames(res_mat)), ] 
+```
+
+
+## Running GSEA
+The pathways/cycles used for comparison and GSEA were the KEGG Legacy Canonical Pathways downloaded from the Human MSigDB Collections. 
+
+```{r}
+pathways<-gmtPathways(paste0("c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt"))
+
+#get ranked genes based on log2FC
+ranks <- res_mat[,2]
+names(ranks) <- rownames(res_mat)
+
+# Sort decreasingly
+ranks <- sort(ranks, decreasing = TRUE)
+```
+
+```{r}
+#jitter so that the ranks will not be tied
+set.seed(2025)
+ranks_jitter <- ranks + rnorm(length(ranks), mean = 0, sd = 1e-8)
+ranks_jitter <- sort(ranks_jitter, decreasing = TRUE)
+
+memory.limit(size = 4096)
+
+#Run fgsea
+fgseaRes <- fgsea(pathways, ranks_jitter, minSize=15, maxSize = 500)
+head(fgseaRes[order(padj, -abs(NES)), ], n=10)
+```
+
+## Analyzing in more detail
+A view of the top 6 pathways can be shown below:
+
+```{r}
+topPathways <- fgseaRes[head(order(padj), n=6)][order(NES), pathway]
+
+plotGseaTable(pathways[topPathways],ranks,fgseaRes)
+```
+
+Select plot ES for pathways of interest using plotEnrichment()
+
+```{r}
+#can change which pathway to plot for ES score, currently plotting the first pathway
+plotEnrichment(pathways[["KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION"]], ranks)
+```
+
