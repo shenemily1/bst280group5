@@ -189,9 +189,9 @@ table(res.05$padj < 0.05)
 ```
 
 ```{r}
-#Raise the log2 fold change threshold to 1
-resLFC1 <- results(dds, lfcThreshold=1)
-table(resLFC1$padj < 0.1)
+#Raise the log2 fold change threshold to 2
+resLFC2 <- results(dds, lfcThreshold=2)
+table(resLFC2$padj < 0.1)
 ```
 
 ```{r}
@@ -208,17 +208,17 @@ head(resSig[ order(-resSig$log2FoldChange), ])
 
 ```{r}
 res.noshr <- results(dds, name="group_tumor_vs_normal")
-plotMA(res.noshr, ylim = c(-5, 5))
+DESeq2::plotMA(res.noshr, ylim = c(-5, 5))
 ```
 
 ```{r}
 resultsNames(dds)
 res_shrunk <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
-plotMA(res_shrunk, ylim = c(-5, 5))
+DESeq2::plotMA(res_shrunk, ylim = c(-5, 5))
 ```
 
 ```{r}
-plotMA(res_shrunk, ylim = c(-5,5))
+DESeq2::plotMA(res_shrunk, ylim = c(-5,5))
 topGene <- rownames(res_shrunk)[which.min(res_shrunk$padj)]
 with(res_shrunk[topGene, ], {
   points(baseMean, log2FoldChange, col="dodgerblue", cex=2, lwd=2)
@@ -389,6 +389,8 @@ saveRDS(res_limma_sig, file = "data/DE_genes_limma.rds")
 
 # Compare results
 
+## Main results - padj \< 0.1
+
 ```{r}
 sig_deseq <- res[de_genes, ]
 
@@ -398,6 +400,71 @@ length(common_genes)
 cor(sig_deseq[common_genes, "log2FoldChange"],
     res_limma_sig[common_genes, "logFC"],
     use = "complete.obs")
+```
+
+```{r}
+#Venn Diagram
+deseq_genes <- rownames(sig_deseq)
+limma_genes <- rownames(res_limma_sig)
+
+only_deseq  <- setdiff(deseq_genes, limma_genes)
+only_limma  <- setdiff(limma_genes, deseq_genes)
+both        <- intersect(deseq_genes, limma_genes)
+
+length(deseq_genes)   # total DESeq2 sig
+length(limma_genes)   # total limma sig
+length(both)          # overlap
+length(only_deseq)    # DESeq2-only
+length(only_limma)    # limma-only
+
+all_genes <- union(rownames(res), rownames(res_limma))
+
+venn_mat <- cbind(
+  DESeq2 = all_genes %in% deseq_genes,
+  limma  = all_genes %in% limma_genes
+)
+rownames(venn_mat) <- all_genes
+
+vennDiagram(venn_mat, main = "DESeq2 vs limma-voom")
+```
+
+## More stringent results - padj \< 0.05 & log2 \> 2
+
+```{r}
+sig_deseq_strict <- subset(
+  res,
+  padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 2
+)
+nrow(sig_deseq_strict)
+
+res_limma_strict <- subset(
+  res_limma,
+  adj.P.Val < 0.05 & !is.na(adj.P.Val) & abs(logFC) > 2
+)
+nrow(res_limma_strict)
+
+deseq_genes_strict <- rownames(sig_deseq_strict)
+limma_genes_strict <- rownames(res_limma_strict)
+
+common_genes_strict <- intersect(deseq_genes_strict, limma_genes_strict)
+length(common_genes_strict)   
+
+cor(
+  sig_deseq_strict[common_genes_strict, "log2FoldChange"],
+  res_limma_strict[common_genes_strict, "logFC"],
+  use = "complete.obs"
+)
+
+all_genes_strict <- union(deseq_genes_strict, limma_genes_strict)
+
+venn_mat_strict <- cbind(
+  DESeq2 = all_genes_strict %in% deseq_genes_strict,
+  limma  = all_genes_strict %in% limma_genes_strict
+)
+rownames(venn_mat_strict) <- all_genes_strict
+
+vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2)")
+
 ```
 
 # Summary of results
