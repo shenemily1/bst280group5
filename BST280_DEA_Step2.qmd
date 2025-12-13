@@ -71,7 +71,7 @@ table(coldata$sex, coldata$dataset)
 #table(coldata$gtex.age)
 #summary(coldata$tcga.cgc_case_age_at_diagnosis)
 
-# TCGA ages (numeric)
+# TCGA ages 
 tcga_age <- coldata$tcga.cgc_case_age_at_diagnosis
 
 # Create comparable age categories
@@ -97,6 +97,7 @@ table(coldata$age_bin, coldata$dataset)
 ```
 
 ```{r}
+#check numbers
 table(coldata$dataset, is.na(coldata$sex))
 table(coldata$dataset, is.na(coldata$age_bin))
 ```
@@ -122,7 +123,7 @@ dds <- DESeqDataSetFromMatrix(
 
 dds
 nrow(dds)
-
+# saveRDS(dds, file = "data/dds.rds") # export for Emily
 ```
 
 # DESeq2
@@ -231,7 +232,7 @@ hist(res$pvalue[res_shrunk$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white",main='P-value histogram')
 ```
 
-## Save results
+## Export results
 
 ```{r}
 de_genes <- rownames(res)[ which(res$padj < 0.1 & !is.na(res$padj)) ]
@@ -251,13 +252,13 @@ saveRDS(de_eset, file = "data/DE_genes_only_eset_DESeq2.rds")
 ## Analysis
 
 ```{r, warning=FALSE, message=FALSE}
-
 countdata_filt <- countdata[, keep]
 coldata_filt   <- coldata[keep, ]
 group          <- coldata_filt$group
 
 y <- DGEList(counts = countdata_filt)
-# filtering (similar to DESeq2)
+
+# filtering using the same for DESeq2 pre-filtering
 keep_genes2 <- filterByExpr(y, group = group)
 y <- y[keep_genes2, , keep.lib.sizes = FALSE]
 y <- calcNormFactors(y)
@@ -272,9 +273,7 @@ fit_limma <- eBayes(fit_limma)
 
 res_limma <- topTable(fit_limma, coef = "grouptumor", number = Inf)
 
-# coefficient for tumor vs normal will be the "group" term
-topTable(fit_limma, coef = "grouptumor", n = 20)  # adjust coef name to match
-
+topTable(fit_limma, coef = "grouptumor", n = 20)  
 ```
 
 ## Plot results
@@ -316,7 +315,6 @@ plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab
 ```
 
 ```{r, message=FALSE, warning=FALSE}
-
 # Heatmap with top 20 differentially expressed genes
 top_genes <- rownames(res_limma)[1:20]
 mat <- v$E[top_genes, ]
@@ -374,7 +372,7 @@ legend(
 )
 ```
 
-## Save results
+## Export results
 
 ```{r}
 # FDR < 0.1, like with DESeq2
@@ -467,12 +465,100 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 
 ```
 
+# Rerun PCA and cluster analysis
+
+## PCA DEA genes - padj \< 0.1
+
+```{r}
+expr_mat <- assayData(filtered_eset)$norm_logtpm  #batch-corrected matrix
+expr_mat <- as.matrix(expr_mat)
+deg_ids <- rownames(de_eset)   
+deg_ids <- intersect(deg_ids, rownames(expr_mat))
+
+expr_deg <- expr_mat[deg_ids, keep, drop = FALSE]
+
+# scale by gene
+expr_deg_scaled <- t(scale(t(expr_deg)))
+
+# PCA
+pca_deg <- prcomp(t(expr_deg_scaled), center = FALSE, scale. = FALSE)
+
+df_pca <- data.frame(
+  PC1 = pca_deg$x[, 1],
+  PC2 = pca_deg$x[, 2],
+  group = coldata_filt$group   # same samples as 'keep'
+)
+
+library(ggplot2)
+
+ggplot(df_pca, aes(PC1, PC2, color = group)) +
+  geom_point(size = 3, alpha = 0.8) +
+  theme_bw(base_size = 14) +
+  ggtitle("PCA using DESeq2 DEGs only, padj < 0.1") +
+  xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
+
+```
+
+## Cluster analysis
+
+```{r}
+cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
+dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
+
+hc_genes <- hclust(dist_mat, method = "average")
+
+k_modules <- 6
+gene_modules <- cutree(hc_genes, k = k_modules)
+
+table(gene_modules)
+
+deg_modules_df <- data.frame(
+  gene_id  = names(gene_modules),
+  module   = as.factor(gene_modules),
+  stringsAsFactors = FALSE
+)
+# head(deg_modules_df)
+# Cluster analysis failed
+```
+
+## PCA DEA genes - padj \< 0.05 & log2 \> 2
+
+```{r}
+deg_ids <- rownames(sig_deseq_strict)   
+deg_ids <- intersect(deg_ids, rownames(expr_mat))
+
+expr_deg <- expr_mat[deg_ids, keep, drop = FALSE]
+
+# scale by gene
+expr_deg_scaled <- t(scale(t(expr_deg)))
+
+# PCA
+pca_deg <- prcomp(t(expr_deg_scaled), center = FALSE, scale. = FALSE)
+
+df_pca <- data.frame(
+  PC1 = pca_deg$x[, 1],
+  PC2 = pca_deg$x[, 2],
+  group = coldata_filt$group   # same samples as 'keep'
+)
+
+library(ggplot2)
+
+ggplot(df_pca, aes(PC1, PC2, color = group)) +
+  geom_point(size = 3, alpha = 0.8) +
+  theme_bw(base_size = 14) +
+  ggtitle("PCA using DESeq2 DEGs only, padj < 0.05 & log2 > 2") +
+  xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
+
+```
+
 # Summary of results
 
 We performed differential expression analysis (DEA) using both DESeq2 and limma-voom, adjusting for age and sex as covariates. Smoking status was excluded because it was available only for tumor samples and not for controls. Both pipelines produced broadly comparable results: a large number of genes were identified as differentially expressed after multiple-testing correction. As expected, applying a more stringent log2​ fold-change threshold resulted in a smaller, more conservative set of significant genes.
 
-Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled.
+Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled. For this reason, both DESeq2 and limma-voom were run using raw counts rather than batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
 
-For this reason, both DESeq2 and limma-voom were run using raw counts rather than batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
+PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. The clustering analyses also failed to detect meaningful clusters due to this data limitation.
 
 Interpretation of the results should therefore be made with caution, as significant findings may partially reflect inter-dataset technical differences rather than true tumor-specific transcriptional changes.
