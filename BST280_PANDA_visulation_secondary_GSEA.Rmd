@@ -13,9 +13,12 @@ output:
 knitr::opts_chunk$set(
   echo = TRUE,
   message = FALSE,
-  warning = FALSE
+  warning = FALSE,
+  fig.path = "PANDA results for network inference and secondary GSEA_figures/"
 )
+
 set.seed(2025)
+source("BST280_EDA_Step1_input for Panda analysis.R") 
 ```
 
 ## Load libraries
@@ -211,7 +214,6 @@ visLegend(net, main = paste0("Key TF: ", key_tf, " (top ", nEdges, " Δ edges)")
 
 ## Load KEGG pathways and build ENSEMBL to SYMBOL map
 ```{r}
-setwd("/Users/yuzhang1112/Documents/BST280/bst280group5")
 pathways <- gmtPathways("data/c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt")
 
 fd <- as.data.table(fData(filtered_eset), keep.rownames = "ensembl")
