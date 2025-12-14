@@ -1,0 +1,473 @@
+---
+title: "PANDA results for network inference and secondary GSEA"
+author: "yuzhang"
+date: "2025-12-14"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+set.seed(2025)
+```
+
+## Load libraries
+```{r}
+library(data.table)
+library(tidyverse)
+library(ggtext)
+library(fgsea)
+library(visNetwork)
+```
+
+## Import PANDA edge lists
+```{r}
+panda_luad <- fread("data/output_panda_LUAD_final.txt")
+panda_gtex <- fread("data/output_panda_GTEx_final.txt")
+
+stopifnot(all(c("tf","gene","force") %in% names(panda_luad)))
+stopifnot(all(c("tf","gene","force") %in% names(panda_gtex)))
+
+# Ensure gene IDs are Ensembl base (drop version if present)
+panda_luad[, gene := sub("\\..*", "", gene)]
+panda_gtex[, gene := sub("\\..*", "", gene)]
+
+head(panda_luad)
+head(panda_gtex)
+```
+
+## Visualize top PANDA regulatory edges
+```{r}
+plot_top_edges <- function(dt, n = 200, title = NULL) {
+  top <- dt[order(-abs(force))][1:n, .(from = tf, to = gene, value = force)]
+  top[, arrows := "to"]
+
+  nodes <- data.frame(
+    id = unique(c(top$from, top$to)),
+    label = unique(c(top$from, top$to)),
+    stringsAsFactors = FALSE
+  )
+  nodes$group <- ifelse(nodes$id %in% top$from, "TF", "gene")
+
+  visNetwork(nodes, top, width = "100%") %>%
+    visGroups(
+      groupname = "TF",
+      shape = "triangle",
+      color = list(background = "purple", border = "black")
+    ) %>%
+    visGroups(
+      groupname = "gene",
+      shape = "dot",
+      color = list(background = "teal", border = "black")
+    ) %>%
+    visLegend(main = ifelse(is.null(title), "Legend", title), position = "right", ncol = 1) %>%
+    visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE)
+}
+```
+
+## LUAD network: top regulatory edges
+```{r}
+plot_top_edges(panda_luad, n = 200, title = "LUAD: top edges")
+```
+
+## GTEx lung network: top regulatory edges
+```{r}
+plot_top_edges(panda_gtex, n = 200, title = "GTEx Lung: top edges")
+```
+
+## Differential edges network (LUAD − GTEx)
+```{r}
+nDiffs <- 100   # top differential edges to plot
+
+setkey(panda_luad, tf, gene)
+setkey(panda_gtex, tf, gene)
+
+diff <- panda_luad[panda_gtex, nomatch = 0]
+diff[, delta := force - i.force]  # LUAD - GTEx
+
+edges <- data.frame(from = character(nDiffs),
+                    to   = character(nDiffs),
+                    value= numeric(nDiffs),
+                    stringsAsFactors = FALSE)
+
+topdiff <- diff[order(-abs(delta))][1:nDiffs, .(tf, gene, delta)]
+
+edges$from   <- topdiff$tf
+edges$to     <- topdiff$gene
+edges$arrows <- "to"
+edges$color  <- ifelse(topdiff$delta > 0, "green", "red")
+edges$value  <- abs(topdiff$delta)  
+
+nodes <- data.frame(
+  id    = unique(c(edges$from, edges$to)),
+  label = unique(c(edges$from, edges$to)),
+  stringsAsFactors = FALSE
+)
+nodes$group <- ifelse(nodes$id %in% edges$from, "TF", "gene")
+
+net <- visNetwork(nodes, edges, width = "100%")
+net <- visGroups(net, groupname = "TF", shape = "triangle",
+                 color = list(background = "purple", border = "black"))
+net <- visGroups(net, groupname = "gene", shape = "dot",
+                 color = list(background = "teal", border = "black"))
+visLegend(net, main = "Legend", position = "right", ncol = 1)
+```
+
+## TF targeting metrics (global rewiring)
+```{r}
+tf_luad <- panda_luad[, .(
+  mean_force_luad = mean(force),
+  sd_force_luad   = sd(force)
+), by = tf]
+
+tf_gtex <- panda_gtex[, .(
+  mean_force_gtex = mean(force),
+  sd_force_gtex   = sd(force)
+), by = tf]
+
+tf_metrics <- merge(tf_luad, tf_gtex, by = "tf")
+tf_metrics[, delta_targeting := mean_force_luad - mean_force_gtex]
+tf_metrics[, abs_delta := abs(delta_targeting)]
+setorder(tf_metrics, -abs_delta)
+
+tf_metrics[1:10]
+```
+
+## Differential targeting bar plot (top TFs)
+```{r}
+topN <- 20
+tf_top <- tf_metrics[1:topN]
+
+ggplot(tf_top, aes(x = reorder(tf, delta_targeting), y = delta_targeting)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = "Transcription factor",
+    y = expression(Delta~"targeting (mean force LUAD − GTEx)"),
+    title = paste0("Top ", topN, " TFs with largest absolute change in targeting")
+  ) +
+  theme_bw()
+```
+
+## TF targeting scatter (LUAD vs GTEx)
+```{r}
+ggplot(tf_metrics, aes(x = mean_force_gtex, y = mean_force_luad)) +
+  geom_point(alpha = 0.35) +
+  geom_abline(slope = 1, intercept = 0) +
+  labs(
+    x = "Mean TF targeting (GTEx lung)",
+    y = "Mean TF targeting (LUAD)",
+    title = "TF targeting strength: LUAD vs GTEx lung"
+  ) +
+  theme_bw()
+```
+
+## Focused subnetwork for one rewired TF (top delta edges)
+```{r}
+key_tf <- tf_metrics$tf[1]
+nEdges <- 50
+
+luad_tf <- panda_luad[tf == key_tf, .(tf, gene, force)]
+gtex_tf <- panda_gtex[tf == key_tf, .(tf, gene, force)]
+setkey(luad_tf, tf, gene)
+setkey(gtex_tf, tf, gene)
+
+sub <- luad_tf[gtex_tf, on = .(tf, gene), nomatch = 0]
+sub[, delta := force - i.force]
+
+top_sub <- sub[order(-abs(delta))][1:nEdges, .(from = tf, to = gene, delta)]
+
+edges <- data.frame(
+  from   = top_sub$from,
+  to     = top_sub$to,
+  value  = abs(top_sub$delta),
+  arrows = "to",
+  color  = ifelse(top_sub$delta > 0, "green", "red"),
+  stringsAsFactors = FALSE
+)
+
+nodes <- data.frame(
+  id = unique(c(edges$from, edges$to)),
+  label = unique(c(edges$from, edges$to)),
+  stringsAsFactors = FALSE
+)
+nodes$group <- ifelse(nodes$id %in% edges$from, "TF", "gene")
+
+net <- visNetwork(nodes, edges, width = "100%")
+net <- visGroups(net, groupname = "TF", shape = "triangle",
+                 color = list(background = "purple", border="black"))
+net <- visGroups(net, groupname = "gene", shape = "dot",
+                 color = list(background = "teal", border="black"))
+visLegend(net, main = paste0("Key TF: ", key_tf, " (top ", nEdges, " Δ edges)"),
+          position = "right", ncol = 1)
+```
+
+## Load KEGG pathways and build ENSEMBL to SYMBOL map
+```{r}
+setwd("/Users/yuzhang1112/Documents/BST280/bst280group5")
+pathways <- gmtPathways("data/c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt")
+
+fd <- as.data.table(fData(filtered_eset), keep.rownames = "ensembl")
+
+fd[, ensembl_base := sub("\\..*", "", ensembl)]
+
+# keep rows with non-empty gene_name
+fd <- fd[!is.na(gene_name) & gene_name != ""]
+setkey(fd, ensembl_base)
+fd_unique <- unique(fd, by = "ensembl_base")
+
+ens2sym_base <- setNames(fd_unique$gene_name, fd_unique$ensembl_base)
+
+# Top TFs to run TF-specific GSEA
+topK <- 10
+top_tfs <- tf_metrics[1:topK, tf]
+top_tfs
+```
+
+## Run TF-specific fgsea on differential targeting ranks (global FDR)
+```{r}
+fgsea_all <- vector("list", length(top_tfs))
+names(fgsea_all) <- top_tfs
+
+for (tf_name in top_tfs) {
+
+  luad_tf <- panda_luad[tf == tf_name, .(gene, force)]
+  gtex_tf <- panda_gtex[tf == tf_name, .(gene, force)]
+  setkey(luad_tf, gene)
+  setkey(gtex_tf, gene)
+
+  tf_diff <- luad_tf[gtex_tf, nomatch = 0]
+  tf_diff[, delta := force - i.force]  # LUAD - GTEx
+
+  tf_diff[, symbol := ens2sym_base[gene]]
+  tf_diff <- tf_diff[!is.na(symbol) & symbol != ""]
+
+  # Collapse duplicates: keep the Ensembl with max |delta| per symbol
+  tf_sym <- tf_diff[, .(delta = delta[which.max(abs(delta))]), by = symbol]
+
+  ranks <- tf_sym$delta
+  names(ranks) <- tf_sym$symbol
+  ranks <- sort(ranks, decreasing = TRUE)
+
+  # Small jitter to break ties
+  ranks <- ranks + rnorm(length(ranks), mean = 0, sd = 1e-8)
+  ranks <- sort(ranks, decreasing = TRUE)
+
+  fg <- fgsea(
+    pathways = pathways,
+    stats = ranks,
+    minSize = 15,
+    maxSize = 500
+  )
+  fg$tf <- tf_name
+
+  fgsea_all[[tf_name]] <- as.data.table(fg)
+}
+
+fgseaRes_all <- rbindlist(fgsea_all, fill = TRUE)
+
+# Global BH across ALL TF×pathway tests
+fgseaRes_all[, padj_global := p.adjust(pval, method = "BH")]
+
+# top 10
+fgseaRes_all[order(padj_global, -abs(NES))][1:10, .(tf, pathway, NES, pval, padj, padj_global, size)]
+```
+
+## Summarize significant TF–pathway associations (global FDR)
+```{r}
+sig <- fgseaRes_all[!is.na(padj_global) & padj_global < 0.05]
+sig[, .N]
+
+top5_each_tf <- sig[order(padj_global)][, head(.SD, 5), by = tf]
+top5_each_tf[, .(tf, pathway, NES, padj_global, size)]
+```
+
+## Heatmap of enriched pathways across top TFs
+```{r}
+# Keep only significant, non-NA results
+heat_dt <- fgseaRes_all[
+  tf %in% top_tfs &
+    !is.na(NES) &
+    !is.na(padj_global) &
+    padj_global < 0.05,
+  .(tf, pathway, NES, padj_global)
+]
+
+if (nrow(heat_dt) == 0) stop("No significant TF–pathway pairs at padj_global < 0.05.")
+
+# Clean pathway names
+heat_dt[, pathway_clean := gsub("^KEGG_", "", pathway)]
+heat_dt[, pathway_clean := tolower(gsub("_", " ", pathway_clean))]
+
+# Choose top pathways (by variance in NES across TFs)
+topN_pathways <- 20
+top_pathways <- heat_dt[, .(varNES = var(NES)), by = pathway_clean][order(-varNES)][1:min(topN_pathways, .N), pathway_clean]
+heat_dt <- heat_dt[pathway_clean %in% top_pathways]
+
+# Order factors
+heat_dt[, tf := factor(tf, levels = top_tfs)]
+pathway_order <- heat_dt[, .(meanNES = mean(NES)), by = pathway_clean][order(meanNES), pathway_clean]
+heat_dt[, pathway_clean := factor(pathway_clean, levels = pathway_order)]
+
+# Stars based on global BH-adjusted p-values (q-values)
+heat_dt[, sig_star :=
+          fifelse(padj_global < 0.001, "***",
+          fifelse(padj_global < 0.01,  "**",
+          fifelse(padj_global < 0.05,  "*", "")))]
+
+p_heat <- ggplot(heat_dt, aes(x = tf, y = pathway_clean, fill = NES)) +
+  geom_tile(color = "white", linewidth = 0.35) +
+  geom_text(aes(label = sig_star), size = 3) +
+  scale_fill_gradient2(
+    low = "#2166AC",
+    mid = "white",
+    high = "#B2182B",
+    midpoint = 0,
+    name = "NES"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "right",
+    plot.caption = element_text(size = 10, hjust = 0)
+  ) +
+  labs(
+    title = "Differential TF regulatory targeting in LUAD vs GTEx",
+    x = "Transcription factor",
+    y = "KEGG pathway",
+    caption = "* q<0.05; ** q<0.01; *** q<0.001. q-values are BH-adjusted p-values computed globally across all TF×pathway tests."
+  )
+
+p_heat
+```
+
+## Bubble plot (top 2 TFs; global FDR)
+```{r bubble-top2, fig.width=11, fig.height=8}
+fdrcut <- 0.01
+top_bubble_n <- 40
+
+bubble_dt <- fgseaRes_all[
+  tf %in% top_tfs[1:2] &
+    !is.na(padj_global) &
+    !is.na(NES) &
+    padj_global < fdrcut,
+  .(tf, pathway, NES, padj_global, size)
+]
+
+if (nrow(bubble_dt) == 0) stop("No bubble plot results at the chosen fdrcut.")
+
+bubble_dt[, pathway_clean := tolower(gsub("_", " ", gsub("^KEGG_", "", pathway)))]
+
+# Keep top N per TF by q-value
+setorder(bubble_dt, tf, padj_global)
+bubble_dt <- bubble_dt[, head(.SD, top_bubble_n), by = tf]
+
+# Optional colored y-labels (no ggplot warning) if ggtext is installed
+use_ggtext <- requireNamespace("ggtext", quietly = TRUE)
+if (use_ggtext) {
+  bubble_dt[, pathway_label := ifelse(
+    NES > 0,
+    paste0("<span style='color:#B2182B'>", pathway_clean, "</span>"),
+    paste0("<span style='color:#2166AC'>", pathway_clean, "</span>")
+  )]
+} else {
+  bubble_dt[, pathway_label := pathway_clean]
+}
+
+# Order y within each facet by q-value
+bubble_dt[, pathway_label := factor(pathway_label, levels = rev(unique(pathway_label))), by = tf]
+
+p_bubble <- ggplot(bubble_dt, aes(x = padj_global, y = pathway_label, size = size)) +
+  geom_point(aes(fill = NES), shape = 21, color = "white") +
+  facet_wrap(~ tf, ncol = 2, scales = "free_y") +
+  scale_size_area(max_size = 12, guide = "none") +
+  scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0) +
+  coord_cartesian(xlim = c(0, fdrcut)) +
+  theme_bw(base_size = 12) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.title.y = element_blank(),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.caption = element_text(size = 10, hjust = 0),
+    axis.text.y = if (use_ggtext) ggtext::element_markdown() else element_text()
+  ) +
+  labs(
+    title = "Enriched KEGG pathways by TF-specific differential targeting",
+    x = "BH-adjusted p-value (global)",
+    fill = "NES",
+    caption = "Bubble size = pathway gene-set size; fill = normalized enrichment score (NES)."
+  )
+
+p_bubble
+```
+
+## Summary
+Across PANDA networks built from LUAD and GTEx lung, we observed substantial regulatory rewiring: many transcription factors (TFs) showed shifts in their global targeting strength (mean edge weight) and in the specific sets of genes and pathways they most strongly regulate. We ranked TFs by the absolute change in mean targeting (LUAD − GTEx) and then, for the top TFs, computed gene-level differential targeting (Δ edge weight per TF→gene) and performed TF-specific GSEA on KEGG gene sets using the signed Δ targeting as the ranking statistic.
+
+Functionally, rewired TF programs showed enrichment of pathways consistent with LUAD biology, including oncogenic and growth-factor signaling (e.g., ERBB/MAPK/mTOR/WNT), cell-cycle control, and DNA repair/replication, suggesting coordinated shifts in regulatory influence toward proliferative and survival programs. In parallel, several TF–pathway associations showed reduced targeting for immune and tissue homeostasis-related processes, consistent with disruption of normal lung regulatory programs and potential immune evasion. Together, these results suggest that LUAD pathogenesis involves not only expression changes but also reorganization of regulatory influence across TF–gene connections.
+
+## Focusing on one gene: EGFR
+```{r}
+## -----------------------------
+## EGFR: TF->gene rewiring table
+## -----------------------------
+egfr_ens <- names(ens2sym_base)[ens2sym_base == "EGFR"][1]
+stopifnot(!is.na(egfr_ens))
+
+# subset edges that target EGFR
+luad_egfr <- panda_luad[gene == egfr_ens, .(tf, force_luad = force)]
+gtex_egfr <- panda_gtex[gene == egfr_ens, .(tf, force_gtex = force)]
+
+setkey(luad_egfr, tf)
+setkey(gtex_egfr, tf)
+
+egfr_rewire <- luad_egfr[gtex_egfr, nomatch = 0]
+egfr_rewire[, delta := force_luad - force_gtex]
+egfr_rewire[, gene := "EGFR"]
+
+# sort by absolute rewiring
+egfr_rewire <- egfr_rewire[order(-abs(delta))]
+
+head(egfr_rewire, 10)
+summary(egfr_rewire$delta)
+
+
+top_each <- 15  # show 15 up + 15 down
+egfr_up   <- egfr_rewire[order(-delta)][1:top_each]
+egfr_down <- egfr_rewire[order(delta)][1:top_each]
+egfr_plot_dt <- rbind(egfr_up, egfr_down)
+
+# label direction
+egfr_plot_dt[, direction := ifelse(delta > 0, "Higher targeting in LUAD", "Lower targeting in LUAD")]
+
+ggplot(egfr_plot_dt, aes(x = reorder(tf, delta), y = delta)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~direction, scales = "free_y") +
+  labs(
+    title = "EGFR regulatory rewiring (TF→EGFR edge weights)",
+    x = "Transcription factor",
+    y = expression(Delta~"targeting (force"[LUAD]*" - force"[GTEx]*")")
+  ) +
+  theme_bw(base_size = 12)
+
+top_tf_for_egfr <- egfr_rewire[1:10, tf]
+top_tf_for_egfr
+
+egfr_tf_path <- fgseaRes_all[
+  tf %in% top_tf_for_egfr & !is.na(padj_global) & padj_global < 0.05,
+  .(tf, pathway, NES, padj_global, size)
+][order(padj_global, -abs(NES))]
+
+head(egfr_tf_path, 30)
+```
