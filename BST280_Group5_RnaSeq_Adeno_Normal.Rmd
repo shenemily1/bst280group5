@@ -590,7 +590,7 @@ chisq.test(table(pd$kmeans_cluster, pd$hist_type))
 
 ```
 
-
+## Differential Expression Analysis 
 
 ```{r, warning=FALSE, message=FALSE}
 #if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -630,6 +630,33 @@ table(coldata$age_cat, coldata$dataset)
 #check numbers
 table(coldata$dataset, is.na(coldata$sex))
 table(coldata$dataset, is.na(coldata$age_cat))
+
+# Generate Table 1
+table(coldata_filt$dataset, coldata_filt$sex)
+table(coldata_filt$dataset, coldata_filt$age_bin)
+
+bin_medians <- c(
+  "20-29" = 25,
+  "30-39" = 35,
+  "40-49" = 45,
+  "50-59" = 55,
+  "60-69" = 65,
+  "70-79" = 75,
+  "80-89" = 85
+)
+
+coldata$age_num <- bin_medians[ as.character(coldata$age_bin) ]
+age_summary_by_group <- coldata %>%
+  group_by(group) %>%
+  summarise(
+    n = sum(!is.na(age_num)),
+    mean_age = mean(age_num, na.rm = TRUE),
+    sd_age = sd(age_num, na.rm = TRUE)
+  )
+kable(
+  age_summary_by_group,
+  caption = "Mean (SD) Age by Tumor Status"
+)
 ```
 
 ```{r, warning=FALSE, message=FALSE}
@@ -721,7 +748,7 @@ table(res.05$padj < 0.05)
 ```{r}
 #Raise the log2 fold change threshold to 2
 resLFC2 <- results(dds, lfcThreshold=2)
-table(resLFC2$padj < 0.1)
+table(resLFC2$padj < 0.05)
 ```
 
 ```{r}
@@ -738,27 +765,24 @@ head(resSig[ order(-resSig$log2FoldChange), ])
 
 ```{r}
 res.noshr <- results(dds, name="group_tumor_vs_normal")
-DESeq2::plotMA(res.noshr, ylim = c(-5, 5))
+DESeq2::plotMA(res.noshr, ylim = c(-10, 10))
 ```
 
 ```{r}
-resultsNames(dds)
-res_shrunk <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
-#while (dev.cur() > 1) dev.off()
-DESeq2::plotMA(res_shrunk, ylim = c(-5, 5))
+# A strict threshold that with shrinkage
+res_shrunk <- lfcShrink(dds, coef = "group_tumor_vs_normal", type = "apeglm")
+
+res_shrunk_strict <- res_shrunk[
+  !is.na(res_shrunk$padj) &
+    res_shrunk$padj < 0.05 &
+    abs(res_shrunk$log2FoldChange) > 2,
+]
+
+DESeq2::plotMA(res_shrunk_strict, ylim = c(-10, 10))
 ```
 
 ```{r}
-DESeq2::plotMA(res_shrunk, ylim = c(-5,5))
-topGene <- rownames(res_shrunk)[which.min(res_shrunk$padj)]
-with(res_shrunk[topGene, ], {
-  points(baseMean, log2FoldChange, col="dodgerblue", cex=2, lwd=2)
-  text(baseMean, log2FoldChange, topGene, pos=2, col="dodgerblue")
-})
-```
-
-```{r}
-hist(res$pvalue[res_shrunk$baseMean > 1], breaks = 0:20/20,
+hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white",main='P-value histogram')
 ```
 
@@ -1039,23 +1063,37 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 ## Cluster analysis
 
 ```{r}
-cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
-dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
+mydata <- t(expr_deg_scaled)
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
 
-hc_genes <- hclust(dist_mat, method = "average")
+# K-Means Cluster Analysis
+fit <- kmeans(mydata, 6) # 6-cluster solution
+# get cluster means 
+aggregate(mydata,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(mydata, fit$cluster)
 
-k_modules <- 4
-gene_modules <- cutree(hc_genes, k = k_modules)
-
-table(gene_modules)
-
-deg_modules_df <- data.frame(
-  gene_id  = names(gene_modules),
-  module   = as.factor(gene_modules),
-  stringsAsFactors = FALSE
+cluster_df <- data.frame(
+  sample  = rownames(mydata),
+  cluster = factor(fit$cluster)
 )
-# head(deg_modules_df)
-# Cluster analysis failed
+
+ggplot(cluster_df, aes(x = cluster)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() +
+  labs(title = "Sample Count per K-means Cluster (k = 6)",
+       x = "Cluster", y = "Number of Samples")
+
+df_pca$cluster <- factor(fit$cluster)
+
+ggplot(df_pca, aes(PC1, PC2, color = cluster)) +
+  geom_point(size=3) +
+  theme_bw() +
+  labs(title = "K-means Clusters Shown on PCA Space")
 ```
 
 ## PCA DEA genes - padj \< 0.05 & log2 \> 2
@@ -1086,8 +1124,9 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
   ggtitle("PCA using DESeq2 DEGs only, padj < 0.05 & log2 > 2") +
   xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
   ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
-
 ```
+
+
 ```{r}
 cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
 dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
@@ -1106,6 +1145,8 @@ deg_modules_df <- data.frame(
 )
 # head(deg_modules_df)
 ```
+
+
 ```{r}
 library(pheatmap)
 pd <- pData(filtered_eset)
@@ -1138,6 +1179,8 @@ pheatmap(
   main = paste0("Hierarchical clustering – DEG module (n = ", nrow(expr_mod_scaled), ")")
 )
 ```
+
+
 ```{r, warning=FALSE, message=FALSE}
 pca <- prcomp(t(expr_deg_scaled), center = TRUE, scale. = FALSE)
 
