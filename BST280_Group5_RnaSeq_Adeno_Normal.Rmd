@@ -876,8 +876,15 @@ plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab
 
 ```{r, message=FALSE, warning=FALSE}
 # Heatmap with top 20 differentially expressed genes
-top_genes <- rownames(res_limma)[1:20]
-mat <- v$E[top_genes, ]
+y <- DGEList(counts = countdata_filt)
+y <- calcNormFactors(y)
+
+logcpm0 <- log2(cpm(y) + 1)   # forces min = 0
+
+res_filt <- subset(res_limma, adj.P.Val < 0.05 & abs(logFC) > 2)
+top_genes <- rownames(res_filt)[1:20]
+#mat <- v$E[top_genes, ]
+mat <- logcpm0[top_genes, ]
 
 # Create color bar with group information
 cols <- coldata_filt$group
