@@ -1037,7 +1037,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 ## PCA DEA genes - padj \< 0.1
 
 ```{r}
-expr_mat <- assayData(filtered_eset)$norm_logtpm  #batch-corrected matrix
+expr_mat <- assayData(filtered_eset)$log_tpm  
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
