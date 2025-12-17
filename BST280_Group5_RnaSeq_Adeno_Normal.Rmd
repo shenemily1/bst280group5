@@ -609,6 +609,7 @@ library(edgeR)
 library(gplots)
 library(Biobase)
 library(limma)
+library(ggplot2)
 
 #Load
 filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
@@ -1056,8 +1057,6 @@ df_pca <- data.frame(
   group = coldata_filt$group   # same samples as 'keep'
 )
 
-library(ggplot2)
-
 ggplot(df_pca, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
@@ -1067,7 +1066,7 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 
 ```
 
-## Cluster analysis
+## Cluster analysis - padj \< 0.1
 
 ```{r}
 mydata <- t(expr_deg_scaled)
@@ -1092,7 +1091,7 @@ cluster_df <- data.frame(
 ggplot(cluster_df, aes(x = cluster)) +
   geom_bar(fill = "steelblue") +
   theme_bw() +
-  labs(title = "Sample Count per K-means Cluster (k = 6)",
+  labs(title = "Sample Count per K-means Cluster (k = 6), padj < 0.1",
        x = "Cluster", y = "Number of Samples")
 
 df_pca$cluster <- factor(fit$cluster)
@@ -1100,57 +1099,68 @@ df_pca$cluster <- factor(fit$cluster)
 ggplot(df_pca, aes(PC1, PC2, color = cluster)) +
   geom_point(size=3) +
   theme_bw() +
-  labs(title = "K-means Clusters Shown on PCA Space")
+  labs(title = "K-means Clusters Shown on PCA Space, padj < 0.1")
 ```
 
 ## PCA DEA genes - padj \< 0.05 & log2 \> 2
 
 ```{r}
-deg_ids <- rownames(sig_deseq_strict)   
-deg_ids <- intersect(deg_ids, rownames(expr_mat))
+deg_ids_strict <- rownames(sig_deseq_strict)   
+deg_ids_strict <- intersect(deg_ids_strict, rownames(expr_mat))
 
-expr_deg <- expr_mat[deg_ids, keep, drop = FALSE]
+expr_deg_strict <- expr_mat[deg_ids_strict, keep, drop = FALSE]
+expr_deg_strict_scaled <- t(scale(t(expr_deg_strict)))
 
-# scale by gene
-expr_deg_scaled <- t(scale(t(expr_deg)))
+pca_deg_strict <- prcomp(t(expr_deg_strict_scaled), center = FALSE, scale. = FALSE)
 
-# PCA
-pca_deg <- prcomp(t(expr_deg_scaled), center = FALSE, scale. = FALSE)
-
-df_pca <- data.frame(
-  PC1 = pca_deg$x[, 1],
-  PC2 = pca_deg$x[, 2],
-  group = coldata_filt$group   # same samples as 'keep'
+df_pca_strict <- data.frame(
+  PC1 = pca_deg_strict$x[, 1],
+  PC2 = pca_deg_strict$x[, 2],
+  group = coldata_filt$group
 )
 
-library(ggplot2)
-
-ggplot(df_pca, aes(PC1, PC2, color = group)) +
+ggplot(df_pca_strict, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
   ggtitle("PCA using DESeq2 DEGs only, padj < 0.05 & log2 > 2") +
-  xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
-  ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
+  xlab(paste0("PC1 (", round(summary(pca_deg_strict)$importance[2,1] * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(summary(pca_deg_strict)$importance[2,2] * 100, 1), "%)"))
 ```
 
+## Cluster analysis - padj \< 0.05 & log2 \> 2
 
 ```{r}
-cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
-dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
+mydata <- t(expr_deg_scaled)
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
 
-hc_genes <- hclust(dist_mat, method = "average")
+# K-Means Cluster Analysis
+fit <- kmeans(mydata, 4) # 4-cluster solution
+# get cluster means 
+aggregate(mydata,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(mydata, fit$cluster)
 
-k_modules <- 6
-gene_modules <- cutree(hc_genes, k = k_modules)
-
-table(gene_modules)
-
-deg_modules_df <- data.frame(
-  gene_id  = names(gene_modules),
-  module   = as.factor(gene_modules),
-  stringsAsFactors = FALSE
+cluster_df <- data.frame(
+  sample  = rownames(mydata),
+  cluster = factor(fit$cluster)
 )
-# head(deg_modules_df)
+
+ggplot(cluster_df, aes(x = cluster)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() +
+  labs(title = "Sample Count per K-means Cluster (k = 4), padj < 0.05 & log2 > 2",
+       x = "Cluster", y = "Number of Samples")
+
+df_pca_strict$cluster <- factor(fit$cluster)
+
+ggplot(df_pca_strict, aes(PC1, PC2, color = cluster)) +
+  geom_point(size=3) +
+  theme_bw() +
+  labs(title = "K-means Clusters Shown on PCA Space, padj < 0.05 & log2 > 2")
 ```
 
 
@@ -1217,7 +1227,7 @@ We performed differential expression analysis (DEA) using both DESeq2 and limma-
 
 Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled. For this reason, both DESeq2 and limma-voom were run not using the batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
 
-PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. The clustering analyses also failed to detect meaningful clusters due to this data limitation.
+PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. When we restricted the sample to a more stringent threshold, the PCA separation became cleaner, suggesting the genes with both small p values and high log fold change may be driving the true biological signals.
 
 Interpretation of the results should therefore be made with caution, as significant findings may partially reflect inter-dataset technical differences rather than true tumor-specific transcriptional changes.
 
