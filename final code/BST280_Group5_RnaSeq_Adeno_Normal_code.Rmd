@@ -1925,5 +1925,16 @@ egfr_tf_path <- fgseaRes_all[
 head(egfr_tf_path, 30)
 ```
 
+6. Deep Dive Into a Key Gene: EGFR
+6.1 Functional Overview and Clinical Relevance
+To understand the mechanistic drivers of Lung Adenocarcinoma (LUAD), we performed a high-resolution analysis of EGFR (Epidermal Growth Factor Receptor). According to NCBI Gene documentation, EGFR is a member of the protein kinase superfamily and encodes a transmembrane glycoprotein. The receptor is activated by binding to epidermal growth factor family members, inducing dimerization and autophosphorylation that ultimately triggers cell proliferation. Pathologically, mutations in EGFR are classically associated with lung cancer development and the orchestration of inflammatory signaling.
 
+6.2 Genomic Architecture and Regulatory Landscapes
+We utilized the UCSC Genome Browser to map the physical regulatory landscape of the EGFR locus on Chromosome 7p11.2. The locus exhibits significant structural complexity, featuring 32 exons and multiple curated RefSeq and GENCODE isoforms. The Layered H3K27Ac track from ENCODE reveals high-intensity enrichment at the canonical promoter and upstream regions. Since H3K27Ac is a hallmark of active promoters and enhancers, these peaks represent accessible "genomic gates" where transcription factors can readily bind. Furthermore, the Cons 100 Verts track highlights that these regulatory sequences are highly conserved across vertebrates, underscoring their critical biological function.
+
+6.3 PANDA Regulatory Rewiring Analysis
+Our PANDA network modeling provides a computational explanation for the aberrant activation of EGFR in the tumor state. By comparing LUAD (Cancer) and GTEx (Normal) networks, we identified a profound reorganization of the transcription factors targeting the EGFR gene. Transcription factors such as ZNF334, FOXF1, and ARID3A showed the most significant increase in targeting force in LUAD. The differential targeting data identifies ZNF334 as a top positive regulator gaining influence in the cancer network, while several homeostatic transcription factors exhibited a loss of targeting force, suggesting a breakdown of normal regulatory constraints. Notably, FOXF1, which gains targeting force toward EGFR, is also significantly enriched in the KEGG Ubiquitin Mediated Proteolysis pathway. This suggests a coordinated oncogenic program where rewired transcription factors simultaneously increase EGFR production and potentially alter its degradation pathways to maintain sustained growth signaling.
+
+6.4 Conclusion
+The synergy between the physical landscape of UCSC H3K27Ac peaks and the network dynamics of PANDA targeting force confirms that EGFR acts as a central hub for transcriptional reprogramming in LUAD. The cancer-specific hijacking of these conserved regulatory elements by rewired transcription factors provides a robust mechanistic explanation for the elevated EGFR activity observed in patient samples, linking epigenetic accessibility directly to oncogenic signaling.
 
