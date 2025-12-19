@@ -5,6 +5,17 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+#knitr::opts_chunk$set(
+#  echo = TRUE,
+#  message = FALSE,
+#  warning = FALSE
+#)
+set.seed(2025)
+```
+```
+
 ## Project Setup
 Download TCGA and GTEX files to directory
 
@@ -316,7 +327,7 @@ saveRDS(filtered_eset, file = "luad_gtex_eset_1207.rds")
 ```
 
 
-```{r pressure, echo=FALSE}
+```{r, echo=FALSE}
 pc_pre  <- PCA_filter_prebatch$x[,1]
 pc_post <- PCA_filter_postbatch$x[,1]
 
@@ -435,7 +446,7 @@ library(dendextend)
 Genes with zero variance across samples were excluded.
 Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
-```{r pressure, echo=FALSE}
+```{r, echo=FALSE}
 ### 1. Extract expression matrix
 expr_mat <- assayData(filtered_eset)[["norm_logtpm"]]
 
@@ -477,7 +488,7 @@ ann_colors <- list(
 )
 ```
 
-```{r pressure, echo=FALSE}
+```{r, echo=FALSE}
 ### 6. Heatmap (precomputed clustering)
 pheatmap(
   expr_scaled,
@@ -1456,15 +1467,6 @@ else
 fi
 
 echo "PANDA script finished."
-```
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  message = FALSE,
-  warning = FALSE
-)
-set.seed(2025)
 ```
 
 ## Load libraries
