@@ -735,6 +735,8 @@ colnames(df)[1:2] <- c("x", "y")
 ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
   coord_fixed() + facet_grid( . ~ transformation) 
 ```
+
+
 ```{r}
 dds <- DESeq(dds)
 res <- results(dds)

@@ -1,3 +1,49 @@
+# **B. Differential Expression analysis**
+
+Methods: 
+
+We conducted differential expression analysis (DEA) using DESeq2, modeling gene expression as a function of disease status while adjusting for age (categories in 10-year increase) and sex (male vs. female) as covariates. Smoking status was not included in the regression model because this information was available only for tumor samples and not for controls. Individuals with missing age or sex information (n = 20) were excluded from the analysis. Resulting p-values were adjusted for multiple testing using the Benjamini–Hochberg false discovery rate (FDR) procedure. Shrinkage of log fold changes at low expression levels was applied to reduce variability among lowly expressed genes, while preserving strong signals among significantly DEGs. As a sensitivity analysis, we additionally performed DEA using limma-voom and compared the identified differentially expressed genes (DEGs) with those obtained from DESeq2.
+
+Results:
+
+After applying for shrinkage of log fold change and corrected for multiple testing, around 3,400 genes were found to be differentially expressed in DESeq2 that passed the threshold of adjusted p value < 0.05 and a log fold change > 2. This substantial number of genes show pronounced positive or negative log fold changes, distributed across a wide range of expression levels. Greater variability in log fold change is observed among genes with lower to moderate expression, whereas highly expressed genes exhibit more stable estimates. Overall, the symmetric distribution of up- and down-regulated genes suggests balanced differential expression between conditions.
+```{r}
+knitr::include_graphics("figures/MA_DESeq2.png")
+```
+
+Both DESeq2 and limma-voom yielded broadly comparable results, with approximately 80% of DEGs identified by both methods. Among these shared DEGs, the Spearman correlation coefficient for log fold-change estimates was 0.98, indicating strong concordance between the two approaches.
+```{r}
+knitr::include_graphics("figures/MA_limma.png")
+```
+
+```{r}
+knitr::include_graphics("figures/Venn.png")
+```
+
+The top 20 differentially expressed genes (DEGs) are shown below, with most exhibiting stronger up-regulation in tumor tissues compared with normal tissues. A majority of these genes were pseudogenes or long non-coding RNAs (lncRNAs). Based on functional annotation from GeneCards, several of the top DEGs are implicated in lung-related pathophysiology, including asthma (PPIAP6) and expiratory flow (HNRNPA1P8).
+```{r}
+knitr::include_graphics("figures/top20genes.png")
+```
+
+# **C. PCA and clustering analysis**
+
+Results: 
+
+PCA based on DEGs (adjusted P < 0.05 and |log₂ fold change| > 2) demonstrated clear separation along the first two principal components, markedly improving discrimination compared with the global PCA. PC1 alone explained up to 56% of the total variance. Minimal overlap was observed between tumor and normal tissues, indicating strong underlying biological separation.
+
+```{r}
+knitr::include_graphics("figures/PCA_DEG.png")
+```
+
+To further characterize DEG expression patterns, unsupervised clustering was performed. Based on the within-cluster sum of squares (WSS) plot, four clusters were selected. Two clusters corresponded to tumor tissues and two to normal tissues, again demonstrating strong separation and distinct clustering between the two tissue types.
+
+```{r}
+knitr::include_graphics("figures/k-means.png")
+```
+
+```{r}
+knitr::include_graphics("figures/cluster_DEGs.png")
+```
 
 # **G. Deep Dive Into a Key Gene: EGFR**
 # **1. Functional Overview and Disease Relevance (NCBI Gene Summary)**
@@ -12,12 +58,13 @@ Using PANDA network inference, we observed a dramatic rewiring of transcriptiona
 
 The table below summarizes transcription factors (TFs) with the largest absolute change in targeting strength toward EGFR:
 
-Rank	Transcription Factor (TF)	Force (LUAD)	Force (GTEx)	Δ Targeting (LUAD − GTEx)	Implication
-1	ZNF334	1.289	-0.302	+1.590	Highly enhanced targeting in LUAD
-2	ZNF384	1.310	-0.280	+1.590	Highly enhanced targeting in LUAD
-3	ZNF25	1.216	-0.343	+1.559	Enhanced targeting in LUAD
-4	FOXS1	1.293	-0.260	+1.554	Enhanced targeting in LUAD
-5	ARID3A	1.024	-0.524	+1.547	Enhanced targeting in LUAD
+| Rank | Transcription Factor (TF) | Force (LUAD) | Force (GTEx) | Δ Targeting (LUAD − GTEx) | Implication |
+|-----:|---------------------------|--------------:|---------------:|---------------------------:|-------------|
+| 1 | ZNF334 | 1.289 | -0.302 | +1.590 | Highly enhanced targeting in LUAD |
+| 2 | ZNF384 | 1.310 | -0.280 | +1.590 | Highly enhanced targeting in LUAD |
+| 3 | ZNF25  | 1.216 | -0.343 | +1.559 | Enhanced targeting in LUAD |
+| 4 | FOXS1  | 1.293 | -0.260 | +1.554 | Enhanced targeting in LUAD |
+| 5 | ARID3A | 1.024 | -0.524 | +1.547 | Enhanced targeting in LUAD |
 
 These results demonstrate a concerted regulatory shift driven primarily by zinc finger proteins (ZNF334, ZNF384, ZNF25) and FOX family transcription factors. Their significantly increased targeting suggests that these TFs act as key drivers of aberrant EGFR upregulation in LUAD.
 
@@ -93,4 +140,7 @@ This enhanced influence is physically supported by H3K27ac-marked active enhance
 Coordinated Oncogenic Program:
 The same transcription factors that upregulate EGFR also globally rewire pathways related to protein degradation, metabolism, and translation, reshaping the cellular environment to sustain malignancy.
 
-Overall, EGFR contributes to LUAD not only through its intrinsic oncogenic signaling but also as a central hub within a massively reorganized transcriptional regulatory network
+Overall, EGFR contributes to LUAD not only through its intrinsic oncogenic signaling but also as a central hub within a massively reorganized transcriptional regulatory network.
+
+Limitations:
+DEA revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled. For this reason, both DESeq2 and limma-voom were run using raw counts rather than batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely. 
