@@ -1,3 +1,33 @@
+## Introduction
+Lung adenocarcinoma (LUAD) is the most prevalent (40%) subtype of lung cancer, and is among one of the most common fatal cancers in the United States. Unlike other lung cancer subtypes, LUAD is frequently diagnosed in those with little or no history of smoking, and increased risk has been observed in younger populations, particularly females. This suggests distinct pathology and regulatory mechanisms, which we desire to investigate through molecular and genetic characterization of LUAD tissues. Examining tissue differences at the genomic level may provide insight into key oncogenic processes and/or regulatory genes, possibly identifying candidate pathways for treatment targeting and design.
+
+In this study, we investigate the transcriptional and regulatory differences between LUAD and normal lung tissue using large-scale RNA sequencing datasets. We compare transcriptomic profiles from LUAD samples from The Cancer Genome Atlas (TCGA-LUAD) with normal lung tissue samples from the Genotype-Tissue Expression (GTEx) database. We aim to answer the research question of which genes and biological pathways are significantly upregulated or downregulated in lung adenocarcinoma compared with normal lung tissue, and how transcription factor targeting networks are altered in this disease context.
+
+To address this question, we first conducted exploratory data analysis using principal component analysis (PCA) and clustering. Then, we performed differential gene expression analysis to pinpoint DE genes in LUAD. Gene set enrichment analysis and functional annotation clustering through DAVID was applied to identify functional pathways associated with observed regulatory changes. We then inferred transcription factor–gene regulatory networks using PANDA and analyzed differential TF targeting patterns between conditions. Finally, we analyzed a key gene (EGFR) identified through these integrative analyses to highlight its potential role in LUAD pathogenesis.
+
+Together, this network-based pipeline aims to elucidate differentially expressed pathways and transcriptional network interaction relevant to LUAD, providing insight into disease biology and potential avenues for therapeutic development.
+
+# **D Gene Set Enrichment Analysis
+# **1. DAVID Functional Annotation Clustering
+The genes from differential expression analysis were analyzed for functional annotations to examine their related pathways. The differentially expressed genes were extracted, then uploaded to DAVID for functional annotation clustering. The genes were compared to the KEGG and Reactome Pathways, and the results of the top 6 significant pathways are shown below.
+
+```{r}
+DAVIDkegg <- read.csv("DAVIDKEGG.csv")
+head(DAVIDkegg[order(DAVIDkegg$Bonferroni),c(1,2,3,5,11,12)])
+
+DAVIDRP <- read.csv("DAVIDREAC.csv")
+head(DAVIDRP[order(DAVIDRP$Bonferroni),c(1,2,3,5,11,12)])
+```
+
+The genes were identified to be enriched in mainly metabolism (including RNA metabolism), disease, and endocytosis pathways.The most significant pathway (p<e-52) was the "Metabolism of RNA" pathway from the Reactome Pathways database. This pathway encompasses RNA processing steps such as capping, splicing, 3'-cleavage, and polyadenylation, as well as mRNA degredation and cleavage that are essential for the transportation and regulation of mature mRNAs in the cell, which are often related to and misregulated in cancer pathology.
+
+# **2. GSEA through fgsea
+After functional annotation clustering, we conducted GSEA through fgsea using the same set of differentially expressed genes. The pathways/cycles used for comparison and GSEA were the KEGG Legacy Canonical Pathways downloaded from the Human MSigDB Collections. The top 6 significant pathways are shown, as well as the enrichment plot of the most significant downregulated pathway.
+```{r}
+knitr::include_graphics("figures/fgseatop6.png")
+knitr::include_graphics("figures/EP_KNLRI.png")
+```
+In terms of significant p-values, the top downregulated pathway (NES = -2.51, padj = 7.8x10^-9) was the KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION pathway, and the top upregulated pathway was KEGG_CELL_CYCLE (NES = 2.10, padj = 1.6x10^-5). KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION describes interactions between neuroactive ligands (such as neurotransmitters and hormones) and their receptors in the nervous system. KEGG_CELL_CYCLE involves the collection of genes in the cell cycle pathway. Downregulation of the neuroactive ligand receptor pathways and upregulation in the cell cycle pathways are characteristic of lung cancer/tumor pathology, and suggests that these pathways may be significant study targets for LUAD therapy research.
 
 # **G. Deep Dive Into a Key Gene: EGFR**
 # **1. Functional Overview and Disease Relevance (NCBI Gene Summary)**
