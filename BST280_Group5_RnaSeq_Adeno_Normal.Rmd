@@ -449,7 +449,7 @@ Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
 ```{r, echo=FALSE}
 ### 1. Extract expression matrix
-expr_mat <- assayData(filtered_eset)[["logtpm"]]
+expr_mat <- assayData(filtered_eset)[["log_tpm"]]
 
 # Drop zero-variance genes
 expr_mat <- expr_mat[apply(expr_mat, 1, var) > 0, ]
@@ -553,7 +553,7 @@ autoplot(
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-expr <- assayData(filtered_eset)[["logtpm"]]
+expr <- assayData(filtered_eset)[["log_tpm"]]
 
 # All genes by MAD
 mad_vals <- apply(expr, 1, mad)
@@ -1104,7 +1104,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 ## PCA DEA genes - padj \< 0.1
 
 ```{r, eval=FALSE}
-expr_mat <- assayData(filtered_eset)$logtpm  #batch-corrected matrix
+expr_mat <- assayData(filtered_eset)$log_tpm  #batch-corrected matrix
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
@@ -1231,7 +1231,7 @@ pd$smoking   <- factor(pd$smoking)
 pd$hist_type <- factor(pd$hist_type)
 pd$dataset   <- factor(pd$dataset)
 
-expr <- assayData(filtered_eset)[["logtpm"]]
+expr <- assayData(filtered_eset)[["log_tpm"]]
 
 # restrict to DEG module
 deg_mod <- intersect(deg_ids, rownames(expr))
