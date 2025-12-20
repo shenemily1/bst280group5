@@ -285,14 +285,14 @@ write.table(
 
 ## Principle Component Analysis
 This code performs principal component analysis (PCA) on the filtered LUAD–GTEx expression dataset before and after batch correction using log-TPM and normalized log-TPM values, respectively. It visualizes the first two principal components colored by dataset to assess batch effects and correction effectiveness, annotating each axis with the variance explained. Finally, the processed ExpressionSet is saved to disk for downstream analyses.
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE }
 library(ggfortify)
 library(limma)
 library(ggplot2)
 # PCA before batch correction
-PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["count"]]))
+PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["counts"]]))
 # PCA after batch correction
-PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["logtpm"]]))
+PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["log_tpm"]]))
 
 
 #autoplot(PCA_filter_prebatch, data=pData(filtered_eset), colour="study",
@@ -1281,7 +1281,7 @@ plot(
 
 ## Load DE genes and packages
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 #de gene list from de workflow in eset_workdlow.qmd
 de_list<-readRDS("data/DE_genes_only_eset_DESeq2.rds")
 ensembl_ids <- sub("\\..*", "", featureNames(de_list))
@@ -1306,7 +1306,7 @@ library(stats)
 
 ```
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 #after running DAVID online
 DAVIDkegg <- read.csv("figures/DAVIDKEGG.csv")
 head(DAVIDkegg[order(DAVIDkegg$Bonferroni),c(1,2,3,5,11,12)])
@@ -1321,7 +1321,7 @@ After running DAVID, the genes were compared with the KEGG pathways. The genes w
 
 From differential expression analysis, a results table of the dds can be obtained. This differential results table codes genes in Ensembl IDs, but fgsea and the KEGG pathways to be compared with uses official gene symbols. Therefore, gene ID conversions need to be done in order to make these datasets comparable. DAVID gene id conversions was used to match Ensembl IDs obtained by DE.
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 # # Load res from dds obtained in DE
 dds<-readRDS("data/dds.rds")
 dds<-DESeq(dds)
@@ -1352,7 +1352,7 @@ saveRDS(res_df, "data/res_annotated.rds")
 
 The pathways/cycles used for comparison and GSEA were the KEGG Legacy Canonical Pathways downloaded from the Human MSigDB Collections.
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 pathways<-gmtPathways(paste0("c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt"))
 
 #get ranked genes based on log2FC
@@ -1389,7 +1389,7 @@ head(fgseaRes[order(padj, -abs(NES)), ], n=10)
 
 A view of the top 6 pathways can be shown below:
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 topPathways <- fgseaRes[head(order(padj), n=6)][order(NES), pathway]
 
 plotGseaTable(pathways[topPathways],ranks,fgseaRes)
@@ -1397,7 +1397,7 @@ plotGseaTable(pathways[topPathways],ranks,fgseaRes)
 
 Select plot ES for pathways of interest using plotEnrichment()
 
-```{r,  echo=FALSE}
+```{r,  eval=FALSE}
 #can change which pathway to plot for ES score, currently plotting the first pathway
 plotEnrichment(pathways[["KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION"]], ranks)
 ```
@@ -1414,7 +1414,7 @@ In terms of significant p-values, the top downregulated pathway (NES = -2.51, pa
  PANDA Network Generation Script for LUAD and GTEx Samples
  This script uses the netzoopy panda command line tool
  =========================================================
-```{r}
+```{r, eval=FALSE}
 #BiocManager::install("netZooR")
 #library(netZooR)
 library(data.table)
