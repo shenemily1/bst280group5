@@ -1246,7 +1246,7 @@ Interpretation of the results should therefore be made with caution, as signific
 
 ## Load DE genes and packages
 
-```{r}
+```{r, echo=FALSE}
 #de gene list from de workflow in eset_workdlow.qmd
 de_list<-readRDS("data/DE_genes_only_eset_DESeq2.rds")
 ensembl_ids <- sub("\\..*", "", featureNames(de_list))
@@ -1271,12 +1271,12 @@ library(stats)
 
 ```
 
-```{r}
+```{r, echo=FALSE}
 #after running DAVID online
-DAVIDkegg <- read.csv("DAVIDKEGG.csv")
+DAVIDkegg <- read.csv("figures/DAVIDKEGG.csv")
 head(DAVIDkegg[order(DAVIDkegg$Bonferroni),c(1,2,3,5,11,12)])
 
-DAVIDRP <- read.csv("DAVIDREAC.csv")
+DAVIDRP <- read.csv("figures/DAVIDREAC.csv")
 head(DAVIDRP[order(DAVIDRP$Bonferroni),c(1,2,3,5,11,12)])
 ```
 
@@ -1286,7 +1286,7 @@ After running DAVID, the genes were compared with the KEGG pathways. The genes w
 
 From differential expression analysis, a results table of the dds can be obtained. This differential results table codes genes in Ensembl IDs, but fgsea and the KEGG pathways to be compared with uses official gene symbols. Therefore, gene ID conversions need to be done in order to make these datasets comparable. DAVID gene id conversions was used to match Ensembl IDs obtained by DE.
 
-```{r}
+```{r, echo=FALSE}
 # # Load res from dds obtained in DE
 dds<-readRDS("data/dds.rds")
 dds<-DESeq(dds)
@@ -1317,7 +1317,7 @@ saveRDS(res_df, "data/res_annotated.rds")
 
 The pathways/cycles used for comparison and GSEA were the KEGG Legacy Canonical Pathways downloaded from the Human MSigDB Collections.
 
-```{r}
+```{r, echo=FALSE}
 pathways<-gmtPathways(paste0("c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt"))
 
 #get ranked genes based on log2FC
@@ -1337,7 +1337,7 @@ ranks <- tapply(ranks, names(ranks), max)
 ranks <- sort(ranks, decreasing = TRUE)
 ```
 
-```{r}
+```{r, echo=FALSE}
 #jitter so that the ranks will not be tied
 set.seed(2025)
 ranks_jitter <- ranks + rnorm(length(ranks), mean = 0, sd = 1e-8)
@@ -1354,7 +1354,7 @@ head(fgseaRes[order(padj, -abs(NES)), ], n=10)
 
 A view of the top 6 pathways can be shown below:
 
-```{r}
+```{r, echo=FALSE}
 topPathways <- fgseaRes[head(order(padj), n=6)][order(NES), pathway]
 
 plotGseaTable(pathways[topPathways],ranks,fgseaRes)
@@ -1362,10 +1362,16 @@ plotGseaTable(pathways[topPathways],ranks,fgseaRes)
 
 Select plot ES for pathways of interest using plotEnrichment()
 
-```{r}
+```{r,  echo=FALSE}
 #can change which pathway to plot for ES score, currently plotting the first pathway
 plotEnrichment(pathways[["KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION"]], ranks)
 ```
+
+```{r}
+knitr::include_graphics("figures/fgseatop6.png")
+knitr::include_graphics("figures/EP_KNLRI.png")
+```
+In terms of significant p-values, the top downregulated pathway (NES = -2.51, padj = 7.8x10^-9) was the KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION pathway, and the top upregulated pathway was KEGG_CELL_CYCLE (NES = 2.10, padj = 1.6x10^-5). KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION describes interactions between neuroactive ligands (such as neurotransmitters and hormones) and their receptors in the nervous system. KEGG_CELL_CYCLE involves the collection of genes in the cell cycle pathway. Downregulation of the neuroactive ligand receptor pathways and upregulation in the cell cycle pathways are characteristic of lung cancer/tumor pathology, and suggests that these pathways may be significant study targets for LUAD therapy research.
 
 ## PANDA Network Analysis
  =========================================================
