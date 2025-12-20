@@ -65,7 +65,7 @@ External biological annotation was incorporated to contextualize these findings.
 ### Project Setup
 This code accesses a shared Google Drive folder using the googledrive package, lists all files within the folder, creates a local data directory, and downloads each file into that directory using its original filename, overwriting existing files to ensure reproducibility.
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(googledrive)
 
 folder_url <- "https://drive.google.com/drive/folders/1RMBPLA1wzeKKzQLEUs8drSFNixa4W2fk"
@@ -86,7 +86,7 @@ for (i in seq_len(nrow(files_list))) {
 
 ### Dataset Loading
 This code loads the required Bioconductor packages and defines a helper function to convert SummarizedExperiment objects into ExpressionSet objects for downstream analysis. The make_eset() function extracts expression matrices (log-transformed TPM and raw counts) from the assay data and combines them with sample-level metadata (phenoData) and gene-level annotations (featureData). Using this function, the TCGA lung adenocarcinoma and GTEx normal lung RNA-seq datasets are loaded from disk and converted into ExpressionSet objects, providing a standardized data structure compatible with legacy Bioconductor workflows such as limma, PCA, and clustering analyses.
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(SummarizedExperiment)
 library(Biobase)
 library(limma)
@@ -118,7 +118,7 @@ eset_gtex <- make_eset(gtex_lung)
 ### Dataset Harmonization
 This code harmonizes feature‐level and sample‐level metadata between the TCGA LUAD and GTEx lung ExpressionSet objects by aligning column names and filling missing fields with NA. It then restricts both datasets to their shared set of genes, labels samples by dataset of origin, and combines expression matrices, counts, and metadata into a single unified ExpressionSet for downstream integrative analysis.
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 harmonize_cols <- function(df1, df2) {
   all_cols <- union(colnames(df1), colnames(df2))
   df1[setdiff(all_cols, colnames(df1))] <- NA
@@ -162,7 +162,7 @@ combined_eset <- ExpressionSet(
 
 This code converts log-transformed TPM values back to the original TPM scale, retrieves raw read counts, and filters genes based on expression prevalence and abundance. Genes are retained if they are expressed at TPM > 1 in at least 20% of samples and have counts > 10 in at least 50% of samples. The filtered gene set is then used to subset the combined ExpressionSet, producing a cleaner dataset for downstream analyses.
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 tpm <- 2^(assayData(combined_eset)$log_tpm) - 1
 counts <- assayData(combined_eset)$counts
 
@@ -175,7 +175,7 @@ dim(filtered_eset)
 ```
 ## Extracting Covariates of Interest
 This code harmonizes key clinical covariates across TCGA LUAD and GTEx lung samples. Age information from TCGA (continuous) and GTEx (categorical) is recoded into a common ordered age category variable, while sex is standardized across datasets. Tumor histology is assigned for TCGA samples with normal tissue labeled accordingly, and smoking status is collapsed into consistent categories (Never, Ever, Missing). The cleaned and harmonized clinical variables are then retained and reassigned to the filtered ExpressionSet for downstream adjusted analyses.
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 pd <- pData(filtered_eset)
 
 #Harmonize age categories
@@ -233,7 +233,7 @@ pData(filtered_eset) <- pd_clean
 
 ## Panda input Fix
 This code prepares batch-corrected expression data for PANDA network inference by aligning expression matrices with sample metadata, resolving identifier mismatches, and exporting properly formatted input files. Samples are first matched to the filtered ExpressionSet metadata to correctly subset LUAD and GTEx samples and avoid indexing errors. Ensembl gene IDs are then cleaned by removing version numbers to ensure compatibility with PANDA. Finally, the corrected expression matrices are reformatted into tab-delimited files with gene IDs as the first column and samples as columns, producing finalized LUAD and GTEx expression files suitable for downstream regulatory network analysis.
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(Biobase) 
 logtpm <- exprs(filtered_eset)
 batch <- pData(filtered_eset)$dataset   # “TCGA_LUAD” / “GTEx_Lung”
@@ -285,7 +285,7 @@ write.table(
 
 ## Principle Component Analysis
 This code performs principal component analysis (PCA) on the filtered LUAD–GTEx expression dataset before and after batch correction using log-TPM and normalized log-TPM values, respectively. It visualizes the first two principal components colored by dataset to assess batch effects and correction effectiveness, annotating each axis with the variance explained. Finally, the processed ExpressionSet is saved to disk for downstream analyses.
-```{r, warning=FALSE, message=FALSE }
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(ggfortify)
 library(limma)
 library(ggplot2)
@@ -328,7 +328,7 @@ saveRDS(filtered_eset, file = "luad_gtex_eset_1207.rds")
 ```
 
 
-```{r}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 pc_pre  <- PCA_filter_prebatch$x[,1]
 pc_post <- PCA_filter_postbatch$x[,1]
 
@@ -368,7 +368,7 @@ head(
 )
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 tissue <- pData(filtered_eset)$hist_type
 
 plot(PCA_filter_postbatch$x[,1], PCA_filter_postbatch$x[,2],
@@ -387,7 +387,7 @@ legend(
 )
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 sex <- pData(filtered_eset)$sex
 plot(
   PCA_filter_postbatch$x[,1], PCA_filter_postbatch$x[,2],
@@ -410,7 +410,7 @@ legend(
 )
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 age_cat <- pData(filtered_eset)$age_cat
 
 plot(
@@ -437,7 +437,7 @@ legend(
 
 ### Hierrchical clustering
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library(Biobase)
 library(pheatmap)
 library(SummarizedExperiment)
@@ -447,7 +447,7 @@ library(dendextend)
 Genes with zero variance across samples were excluded.
 Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
-```{r, echo=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 ### 1. Extract expression matrix
 expr_mat <- assayData(filtered_eset)[["log_tpm"]]
 
@@ -489,7 +489,7 @@ ann_colors <- list(
 )
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 ### 6. Heatmap (precomputed clustering)
 pheatmap(
   expr_scaled,
@@ -507,7 +507,7 @@ pheatmap(
 ```
 
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 colnames(pData(filtered_eset))
 pd <- pData(filtered_eset)
 
@@ -536,23 +536,7 @@ pheatmap(
 
 ```
 
-```{r, warning=FALSE, message=FALSE}
-luad_idx <- pd$dataset == "TCGA_LUAD"
-
-pca_luad <- prcomp(t(expr_scaled[, luad_idx]))
-
-autoplot(
-  pca_luad,
-  data = pd[luad_idx, ],
-  colour = "hist_type",
-  shape  = "smoking"
-) +
-  theme_classic() +
-  labs(title = "LUAD transcriptional heterogeneity by histology and smoking")
-
-```
-
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 expr <- assayData(filtered_eset)[["log_tpm"]]
 
 # All genes by MAD
@@ -575,7 +559,23 @@ plot(2:8, wss, type = "b",
      ylab = "Total within-cluster sum of squares")
 ```
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
+luad_idx <- pd$dataset == "TCGA_LUAD"
+
+pca_luad <- prcomp(t(expr_scaled[, luad_idx]))
+
+autoplot(
+  pca_luad,
+  data = pd[luad_idx, ],
+  colour = "hist_type",
+  shape  = "smoking"
+) +
+  theme_classic() +
+  labs(title = "LUAD transcriptional heterogeneity by histology and smoking")
+
+```
+
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 set.seed(123)
 km_res <- kmeans(pc_mat, centers = 3, nstart = 100)
 
@@ -598,7 +598,7 @@ ggplot(pca_df, aes(PC1, PC2, color = cluster, shape = dataset)) +
   labs(title = "k-means clustering of RNA-seq samples")
 ```
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 table(pd$kmeans_cluster, pd$hist_type)
 table(pd$kmeans_cluster, pd$smoking)
 chisq.test(table(pd$kmeans_cluster, pd$hist_type))
@@ -1372,7 +1372,7 @@ ranks <- tapply(ranks, names(ranks), max)
 ranks <- sort(ranks, decreasing = TRUE)
 ```
 
-```{r, echo=FALSE}
+```{r, eval=FALSE}
 #jitter so that the ranks will not be tied
 set.seed(2025)
 ranks_jitter <- ranks + rnorm(length(ranks), mean = 0, sd = 1e-8)
@@ -1429,87 +1429,49 @@ motif[1:5,]
 ```
 
 
-
+```{r, eval=FALSE}
 # Common PANDA arguments
-PANDA_ARGS="--mode_process intersection --with_header"
 
-echo "Starting PANDA run for LUAD (Cancer Samples)..."
-
-NETZOOPY="/Users/peterlin/venvs/netzoopy311/bin/netzoopy"
-
-$NETZOOPY panda \
-  -e "`r luad_expr`" \
-  -m "`r motif_prior`" \
-  -p "`r ppi_prior`" \
-  --mode_process intersection --with_header \
-  -o "`r luad_out`"
-
-if [ $? -eq 0 ]; then
-  echo "LUAD PANDA network successfully generated."
-else
-  echo "Error: LUAD PANDA network generation failed."
-fi
-
-echo "------------------------------------------------------"
-
-echo "Starting PANDA run for GTEx (Normal Samples)..."
-netzoopy panda \
-  -e "`r gtex_expr`" \
-  -m "`r motif_prior`" \
-  -p "`r ppi_prior`" \
-  ${PANDA_ARGS} \
-  -o "`r gtex_out`"
-
-if [ $? -eq 0 ]; then
-  echo "GTEx PANDA network successfully generated."
-else
-  echo "Error: GTEx PANDA network generation failed."
-fi
-
-echo "PANDA script finished."
-
-
-```{bash, engine.opts='-l'}
 # Define the common prior files for clarity
-MOTIF_PRIOR="~/159009/data/motif_997TFs_ensembl.txt"
-PPI_PRIOR="~/159009/data/ppi_997TFs.txt"
+#MOTIF_PRIOR="~/159009/data/motif_997TFs_ensembl.txt"
+#PPI_PRIOR="~/159009/data/ppi_997TFs.txt"
 
 # Common PANDA arguments
-PANDA_ARGS="--mode_process intersection --with_header"
+#PANDA_ARGS="--mode_process intersection --with_header"
 
 ## --- 1. Run LUAD Network Generation ---
-echo "Starting PANDA run for LUAD (Cancer Samples)..."
-netzoopy panda \
-  -e luad_corrected_expression_final.txt \
-  -m ${MOTIF_PRIOR} \
-  -p ${PPI_PRIOR} \
-  ${PANDA_ARGS} \
-  -o ~/output_panda_LUAD_final.txt
+#echo "Starting PANDA run for LUAD (Cancer Samples)..."
+#netzoopy panda \
+#  -e luad_corrected_expression_final.txt \
+#  -m ${MOTIF_PRIOR} \
+#  -p ${PPI_PRIOR} \
+#  ${PANDA_ARGS} \
+#  -o ~/output_panda_LUAD_final.txt
 
-if [ $? -eq 0 ]; then
-  echo "LUAD PANDA network successfully generated."
-else
-  echo "Error: LUAD PANDA network generation failed."
-fi
+#if [ $? -eq 0 ]; then
+#  echo "LUAD PANDA network successfully generated."
+#else
+#  echo "Error: LUAD PANDA network generation failed."
+#fi
 
-echo "------------------------------------------------------"
+#echo "------------------------------------------------------"
 
 ## --- 2. Run GTEx Network Generation ---
-echo "Starting PANDA run for GTEx (Normal Samples)..."
-netzoopy panda \
-  -e gtex_corrected_expression_final.txt \
-  -m ${MOTIF_PRIOR} \
-  -p ${PPI_PRIOR} \
-  ${PANDA_ARGS} \
-  -o ~/output_panda_GTEx_final.txt
+#echo "Starting PANDA run for GTEx (Normal Samples)..."
+#netzoopy panda \
+#  -e gtex_corrected_expression_final.txt \
+#  -m ${MOTIF_PRIOR} \
+#  -p ${PPI_PRIOR} \
+#  ${PANDA_ARGS} \
+#  -o ~/output_panda_GTEx_final.txt
 
-if [ $? -eq 0 ]; then
-  echo "GTEx PANDA network successfully generated."
-else
-  echo "Error: GTEx PANDA network generation failed."
-fi
+#if [ $? -eq 0 ]; then
+#  echo "GTEx PANDA network successfully generated."
+#else
+#  echo "Error: GTEx PANDA network generation failed."
+#fi
 
-echo "PANDA script finished."
+#echo "PANDA script finished."
 ```
 
 ```{r setup, include=FALSE}
@@ -1526,9 +1488,11 @@ set.seed(2025)
 library(data.table)
 library(tidyverse)
 library(ggtext)
+library(igraph)
 library(ggraph)
 library(fgsea)
 library(visNetwork)
+library(googledrive)
 ```
 
 ## Import PANDA edge lists
