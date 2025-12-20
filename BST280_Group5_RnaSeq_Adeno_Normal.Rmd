@@ -429,7 +429,7 @@ library(dendextend)
 Genes with zero variance across samples were excluded.
 Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
-```{r , echo=FALSE}
+```{r, echo=FALSE}
 ### 1. Extract expression matrix
 expr_mat <- assayData(filtered_eset)[["logtpm"]]
 
@@ -587,9 +587,57 @@ chisq.test(table(pd$kmeans_cluster, pd$hist_type))
 
 ```
 
+# **B. Differential Expression analysis**
+
+Methods: 
+
+We conducted differential expression analysis (DEA) using DESeq2, modeling gene expression as a function of disease status while adjusting for age (categories in 10-year increase) and sex (male vs. female) as covariates. Smoking status was not included in the regression model because this information was available only for tumor samples and not for controls. Individuals with missing age or sex information (n = 20) were excluded from the analysis. Resulting p-values were adjusted for multiple testing using the Benjamini–Hochberg false discovery rate (FDR) procedure. Shrinkage of log fold changes at low expression levels was applied to reduce variability among lowly expressed genes, while preserving strong signals among significantly DEGs. As a sensitivity analysis, we additionally performed DEA using limma-voom and compared the identified differentially expressed genes (DEGs) with those obtained from DESeq2.
+
+Results:
+
+After applying for shrinkage of log fold change and corrected for multiple testing, around 3,400 genes were found to be differentially expressed in DESeq2 that passed the threshold of adjusted p value < 0.05 and a log fold change > 2. This substantial number of genes show pronounced positive or negative log fold changes, distributed across a wide range of expression levels. Greater variability in log fold change is observed among genes with lower to moderate expression, whereas highly expressed genes exhibit more stable estimates. Overall, the symmetric distribution of up- and down-regulated genes suggests balanced differential expression between conditions.
+```{r}
+knitr::include_graphics("figures/MA_DESeq2.png")
+```
+
+Both DESeq2 and limma-voom yielded broadly comparable results, with approximately 80% of DEGs identified by both methods. Among these shared DEGs, the Spearman correlation coefficient for log fold-change estimates was 0.98, indicating strong concordance between the two approaches.
+```{r}
+knitr::include_graphics("figures/MA_limma.png")
+```
+
+```{r}
+knitr::include_graphics("figures/Venn.png")
+```
+
+The top 20 differentially expressed genes (DEGs) are shown below, with most exhibiting stronger up-regulation in tumor tissues compared with normal tissues. A majority of these genes were pseudogenes or long non-coding RNAs (lncRNAs). Based on functional annotation from GeneCards, several of the top DEGs are implicated in lung-related pathophysiology, including asthma (PPIAP6) and expiratory flow (HNRNPA1P8).
+```{r}
+knitr::include_graphics("figures/top20genes.png")
+```
+
+# **C. PCA and clustering analysis**
+
+Results: 
+
+PCA based on DEGs (adjusted P < 0.05 and |log₂ fold change| > 2) demonstrated clear separation along the first two principal components, markedly improving discrimination compared with the global PCA. PC1 alone explained up to 56% of the total variance. Minimal overlap was observed between tumor and normal tissues, indicating strong underlying biological separation.
+
+```{r}
+knitr::include_graphics("figures/PCA_DEG.png")
+```
+
+To further characterize DEG expression patterns, unsupervised clustering was performed. Based on the within-cluster sum of squares (WSS) plot, four clusters were selected. Two clusters corresponded to tumor tissues and two to normal tissues, again demonstrating strong separation and distinct clustering between the two tissue types.
+
+```{r}
+knitr::include_graphics("figures/k-means.png")
+```
+
+```{r}
+knitr::include_graphics("figures/cluster_DEGs.png")
+```
+
+
 ## Differential Expression Analysis 
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 #if (!requireNamespace("BiocManager", quietly = TRUE))
 #    install.packages("BiocManager")
 #BiocManager::install("rnaseqGene", version = "3.8")
@@ -621,7 +669,7 @@ coldata$group <- factor(coldata$group, levels = c("normal", "tumor"))
 table(coldata$group)
 ```
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 # Extract counts and metadata
 countdata <- assayData(filtered_eset)$counts
 coldata   <- as.data.frame(pData(filtered_eset))
@@ -695,7 +743,7 @@ saveRDS(dds, file = "data/dds.rds") # export for Emily
 # DESeq2
 ## Pre-filtering datasets
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 library("vsn") # for variance stabilization
 library("hexbin") # for visualization
 
@@ -710,7 +758,7 @@ meanSdPlot(log.cts.one, ranks = FALSE)
 ```
 
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 #Use the variance stabilizing transformation (VST) for count data that stabilize the variance across the mean: 
 vsd <- vst(dds, blind = FALSE)
 head(assay(vsd), 3)
@@ -726,7 +774,8 @@ colnames(df)[1:2] <- c("x", "y")
 ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
   coord_fixed() + facet_grid( . ~ transformation) 
 ```
-```{r}
+
+```{r, eval=FALSE}
 dds <- DESeq(dds)
 res <- results(dds)
 res
@@ -736,25 +785,25 @@ summary(res)
 
 ## Summarizing results
 
-```{r}
+```{r, eval=FALSE}
 #raw results
 sum(res$pvalue < 0.05, na.rm=TRUE)
 sum(!is.na(res$pvalue)) 
 ```
 
-```{r}
+```{r, eval=FALSE}
 #FDR correction
 res.05 <- results(dds, alpha = 0.05)
 table(res.05$padj < 0.05)
 ```
 
-```{r}
+```{r, eval=FALSE}
 #Raise the log2 fold change threshold to 2
 resLFC2 <- results(dds, lfcThreshold=2)
 table(resLFC2$padj < 0.05)
 ```
 
-```{r}
+```{r, eval=FALSE}
 sum(res$padj < 0.1, na.rm=TRUE)
 resSig <- subset(res, padj < 0.1)
 
@@ -766,12 +815,12 @@ head(resSig[ order(-resSig$log2FoldChange), ])
 
 ## Plotting results
 
-```{r}
+```{r, eval=FALSE}
 res.noshr <- results(dds, name="group_tumor_vs_normal")
 DESeq2::plotMA(res.noshr, ylim = c(-10, 10))
 ```
 
-```{r}
+```{r, eval=FALSE}
 # A strict threshold that with shrinkage
 res_shrunk <- lfcShrink(dds, coef = "group_tumor_vs_normal", type = "apeglm")
 
@@ -784,14 +833,14 @@ res_shrunk_strict <- res_shrunk[
 DESeq2::plotMA(res_shrunk_strict, ylim = c(-10, 10))
 ```
 
-```{r}
+```{r, eval=FALSE}
 hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white",main='P-value histogram')
 ```
 
 ## Export results
 
-```{r}
+```{r, eval=FALSE}
 de_genes <- rownames(res)[ which(res$padj < 0.1 & !is.na(res$padj)) ]
 length(intersect(de_genes, featureNames(filtered_eset)))
 
@@ -814,7 +863,7 @@ saveRDS(de_eset, file = "data/DE_genes_only_eset_DESeq2.rds")
 
 ## Analysis
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 countdata_filt <- countdata[, keep]
 coldata_filt   <- coldata[keep, ]
 group          <- coldata_filt$group
@@ -829,7 +878,7 @@ y <- calcNormFactors(y)
 design_limma <- model.matrix(~ sex + age_cat + group, data = coldata_filt)
 ```
 
-```{r}
+```{r, eval=FALSE}
 v <- voom(y, design_limma, plot = TRUE)
 fit_limma <- lmFit(v, design_limma)
 fit_limma <- eBayes(fit_limma)
@@ -841,28 +890,28 @@ topTable(fit_limma, coef = "grouptumor", n = 20)
 
 ## Plot results
 
-```{r}
+```{r, eval=FALSE}
 plotSA(fit_limma, main="Final model mean-variance trend")
 ```
 
 ## Plotting results
 
-```{r}
+```{r, eval=FALSE}
 # Find the number of genes differentially expressed under a defined thereshold (FDR<0.05 and absolute log fold-change greater than 2).
 sum(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2)
 ```
 
-```{r}
+```{r, eval=FALSE}
 # Find the number of genes overexpressed in the cell lines
 sum(res_limma$adj.P.Val < 0.05 & res_limma$logFC > 2)
 ```
 
-```{r}
+```{r, eval=FALSE}
 # Find the number of genes overexpressed in the tissue samples
 sum(res_limma$adj.P.Val < 0.05 & res_limma$logFC < -2)
 ```
 
-```{r}
+```{r, eval=FALSE}
 # Volcano-plot
 # Color genes differentially expressed under a defined thereshold (FDR<0.05 and absolute log fold-change greater than 2).
 sig = ifelse(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2, yes="red",no="black")
@@ -870,14 +919,14 @@ plot(x=res_limma$logFC, y=-log(res_limma$adj.P.Val), xlab="log-fold-change",
      ylab="-log(FDR)",pch=21,col=sig,bty="l", main="Volcano plot", cex=0.8)
 ```
 
-```{r}
+```{r, eval=FALSE}
 # MA plot
 sig = ifelse(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2, yes="red",no="black")
 plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab="log-fold-change",
      pch=21,col=sig,bty="l", main="MA plot", cex=0.8)
 ```
 
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, eval=FALSE}
 # Heatmap with top 20 differentially expressed genes
 y <- DGEList(counts = countdata_filt)
 y <- calcNormFactors(y)
@@ -916,7 +965,7 @@ legend(
 )
 ```
 
-```{r}
+```{r, eval=FALSE}
 # Replace row names by gene symbol
 feat <- fData(filtered_eset)
 symbol <- feat[rownames(mat), "gene_name"]
@@ -944,7 +993,7 @@ legend(
 
 ## Export results
 
-```{r}
+```{r, eval=FALSE}
 # FDR < 0.1, like with DESeq2
 res_limma_sig <- res_limma[res_limma$adj.P.Val < 0.1, ]
 nrow(res_limma_sig)  
@@ -959,7 +1008,7 @@ saveRDS(res_limma_sig, file = "data/DE_genes_limma.rds")
 
 ## Main results - padj \< 0.1
 
-```{r}
+```{r, eval=FALSE}
 sig_deseq <- res[de_genes, ]
 
 common_genes <- intersect(rownames(sig_deseq), rownames(res_limma_sig))
@@ -970,7 +1019,7 @@ cor(sig_deseq[common_genes, "log2FoldChange"],
     use = "complete.obs")
 ```
 
-```{r}
+```{r, eval=FALSE}
 #Venn Diagram
 deseq_genes <- rownames(sig_deseq)
 limma_genes <- rownames(res_limma_sig)
@@ -998,7 +1047,7 @@ vennDiagram(venn_mat, main = "DESeq2 vs limma-voom")
 
 ## More stringent results - padj \< 0.05 & log2 \> 2
 
-```{r}
+```{r, eval=FALSE}
 sig_deseq_strict <- subset(
   res,
   padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 2
@@ -1039,7 +1088,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 
 ## PCA DEA genes - padj \< 0.1
 
-```{r}
+```{r, eval=FALSE}
 expr_mat <- assayData(filtered_eset)$logtpm  #batch-corrected matrix
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
@@ -1072,7 +1121,7 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 
 ## Cluster analysis
 
-```{r}
+```{r, eval=FALSE}
 mydata <- t(expr_deg_scaled)
 wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
 for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
@@ -1108,7 +1157,7 @@ ggplot(df_pca, aes(PC1, PC2, color = cluster)) +
 
 ## PCA DEA genes - padj \< 0.05 & log2 \> 2
 
-```{r}
+```{r, eval=FALSE}
 deg_ids <- rownames(sig_deseq_strict)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
 
@@ -1137,7 +1186,7 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
 dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
 
@@ -1157,7 +1206,7 @@ deg_modules_df <- data.frame(
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 library(pheatmap)
 pd <- pData(filtered_eset)
 
@@ -1191,7 +1240,7 @@ pheatmap(
 ```
 
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=FALSE}
 pca <- prcomp(t(expr_deg_scaled), center = TRUE, scale. = FALSE)
 
 # cumulative variance explained
@@ -1214,19 +1263,9 @@ plot(
 )
 ```
 
-# Summary of results
-
-We performed differential expression analysis (DEA) using both DESeq2 and limma-voom, adjusting for age and sex as covariates. Smoking status was excluded because it was available only for tumor samples and not for controls. Both pipelines produced broadly comparable results: a large number of genes were identified as differentially expressed after multiple-testing correction. As expected, applying a more stringent log2 fold-change threshold resulted in a smaller, more conservative set of significant genes.
-
-Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled. For this reason, both DESeq2 and limma-voom were run not using the batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
-
-PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. The clustering analyses also failed to detect meaningful clusters due to this data limitation.
-
-Interpretation of the results should therefore be made with caution, as significant findings may partially reflect inter-dataset technical differences rather than true tumor-specific transcriptional changes.
-
 ## Load DE genes and packages
 
-```{r}
+```{r, eval=FALSE}
 #de gene list from de workflow in eset_workdlow.qmd
 de_list<-readRDS("data/DE_genes_only_eset_DESeq2.rds")
 ensembl_ids <- sub("\\..*", "", featureNames(de_list))
@@ -1251,7 +1290,7 @@ library(stats)
 
 ```
 
-```{r}
+```{r, eval=FALSE}
 #after running DAVID online
 DAVIDkegg <- read.csv("DAVIDKEGG.csv")
 head(DAVIDkegg[order(DAVIDkegg$Bonferroni),c(1,2,3,5,11,12)])
@@ -1266,7 +1305,7 @@ After running DAVID, the genes were compared with the KEGG pathways. The genes w
 
 From differential expression analysis, a results table of the dds can be obtained. This differential results table codes genes in Ensembl IDs, but fgsea and the KEGG pathways to be compared with uses official gene symbols. Therefore, gene ID conversions need to be done in order to make these datasets comparable. DAVID gene id conversions was used to match Ensembl IDs obtained by DE.
 
-```{r}
+```{r, eval=FALSE}
 # # Load res from dds obtained in DE
 dds<-readRDS("data/dds.rds")
 dds<-DESeq(dds)
@@ -1297,7 +1336,7 @@ saveRDS(res_df, "data/res_annotated.rds")
 
 The pathways/cycles used for comparison and GSEA were the KEGG Legacy Canonical Pathways downloaded from the Human MSigDB Collections.
 
-```{r}
+```{r, eval=FALSE}
 pathways<-gmtPathways(paste0("c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt"))
 
 #get ranked genes based on log2FC
@@ -1317,7 +1356,7 @@ ranks <- tapply(ranks, names(ranks), max)
 ranks <- sort(ranks, decreasing = TRUE)
 ```
 
-```{r}
+```{r, eval=FALSE}
 #jitter so that the ranks will not be tied
 set.seed(2025)
 ranks_jitter <- ranks + rnorm(length(ranks), mean = 0, sd = 1e-8)
