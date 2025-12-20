@@ -1430,7 +1430,6 @@ motif[1:5,]
 
 
 
-```{bash, engine.opts='-l'}
 # Common PANDA arguments
 PANDA_ARGS="--mode_process intersection --with_header"
 
@@ -1468,7 +1467,7 @@ else
 fi
 
 echo "PANDA script finished."
-```
+
 
 ```{bash, engine.opts='-l'}
 # Define the common prior files for clarity
