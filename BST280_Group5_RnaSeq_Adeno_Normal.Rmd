@@ -437,7 +437,7 @@ legend(
 
 ### Hierrchical clustering
 
-```{r, warning=FALSE, message=FALSE, eval=FALSE}
+```{r, warning=FALSE, message=FALSE}
 library(Biobase)
 library(pheatmap)
 library(SummarizedExperiment)
