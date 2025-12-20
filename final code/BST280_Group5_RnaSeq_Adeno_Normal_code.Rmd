@@ -2,56 +2,22 @@
 title: "BST280_Group5_RnaSeq_Adeno_Normal"
 author: "Peter Lin, Siwen Wang, Emily Shen, Chris Deng, Yu Zhang"
 date: "`r Sys.Date()`"
-output:
-  pdf_document: default
-  html_document: default
+output: html_document
 ---
 
-# Introduction
-Lung adenocarcinoma (LUAD) is the most common histologic subtype of lung cancer and remains a leading cause of cancer-related mortality worldwide, driven by complex molecular alterations that extend beyond single gene mutations to coordinated dysregulation of transcriptional programs and regulatory networks. Large-scale transcriptomic resources such as The Cancer Genome Atlas (TCGA) and the Genotype-Tissue Expression (GTEx) project provide a unique opportunity to systematically compare tumor and normal lung tissue at the genome-wide expression level and to interrogate mechanisms underlying malignant transformation. 
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+#knitr::opts_chunk$set(
+#  echo = TRUE,
+#  message = FALSE,
+#  warning = FALSE
+#)
+set.seed(2025)
+```
+```
 
-While prior studies have identified recurrent oncogenic pathways and driver genes in LUAD, less is understood about how transcription factor–target interactions are globally rewired in cancer relative to normal lung tissue. In this study, we propose an integrative comparative transcriptomic and network-based analysis of TCGA LUAD and GTEx normal lung samples to characterize differential gene expression patterns, pathway enrichment, and transcriptional regulatory architecture. By combining dimensionality reduction, differential expression analysis, gene set enrichment, and PANDA-based network inference, this work aims to identify key dysregulated pathways and transcription factors that jointly distinguish LUAD from normal lung tissue and provide insight into the regulatory mechanisms underlying lung tumorigenesis
-
-# Methods
-
-## A. Exploratory Data Analysis 
-
-
-## E. Regulatory Network Inference Using PANDA
-To characterize transcriptional regulatory architecture in lung adenocarcinoma and normal lung tissue, we inferred gene regulatory networks using PANDA (Passing Attributes between Networks for Data Assimilation). PANDA integrates three complementary data layers: (i) gene expression profiles, (ii) transcription factor (TF)–gene motif prior information, and (iii) protein–protein interaction (PPI) data among transcription factors. This framework enables estimation of condition-specific regulatory interactions while leveraging prior biological knowledge.
-
-Gene expression data were first harmonized across LUAD (TCGA) and normal lung (GTEx) samples. After gene filtering and batch-effect correction, PANDA networks were inferred separately for LUAD and GTEx using identical motif and PPI priors to ensure comparability. Each PANDA network represents a weighted bipartite graph, where nodes correspond to TFs and target genes, and edge weights (force scores) reflect the inferred strength of regulatory support for each TF–gene interaction.
-
-To quantify differences in regulatory architecture between tumor and normal tissue, we compared corresponding TF–gene edges between the LUAD and GTEx networks. For each shared TF–gene pair, a differential targeting score was computed as the difference in edge weight between the two conditions (LUAD minus GTEx). Positive values indicate increased regulatory targeting in LUAD, whereas negative values indicate stronger targeting in normal lung tissue.
-
-At the transcription factor level, we summarized regulatory rewiring by computing the mean targeting strength of each TF across all its target genes in both networks. Transcription factors were ranked by the absolute difference in mean targeting between LUAD and GTEx, identifying regulators with the largest shifts in regulatory influence. Network-level differences were visualized using differential targeting plots and focused network subgraphs highlighting the most strongly rewired TF–gene interactions.
-
-## F. Identification of Differentially Targeting Transcription Factors and Functional Pathways
-
-Using the PANDA-inferred regulatory networks, we next identified transcription factors exhibiting the largest condition-specific changes in regulatory targeting between LUAD and normal lung tissue. Top differentially targeting TFs were selected based on the absolute change in their mean edge weights across conditions.
-
-For each selected TF, we defined a TF-specific differential targeting profile by calculating gene-level differences in TF–gene edge weights (LUAD minus GTEx). Genes were ranked according to these signed differential targeting scores, capturing whether a TF preferentially increased or decreased regulatory influence on specific targets in LUAD.
-
-To functionally characterize these rewired regulatory programs, we performed secondary gene set enrichment analysis (GSEA) using the ranked gene lists for each TF. KEGG canonical pathways were used as gene sets, and enrichment analysis was conducted using the fgsea framework. This approach identifies biological pathways whose member genes are collectively more strongly or weakly targeted by a given TF in LUAD relative to normal lung tissue.
-
-To account for multiple hypothesis testing across TFs and pathways, p-values were adjusted using the Benjamini–Hochberg false discovery rate (FDR) procedure. Significant TF–pathway associations were summarized using heatmaps and bubble plots, enabling visualization of pathway-level regulatory shifts across multiple TFs.
-
-Together, this network-based framework allowed us to link transcriptional regulatory rewiring to functional pathway alterations, providing insight into how changes in TF targeting contribute to LUAD pathogenesis beyond differential gene expression alone.
-
-## G. Deep Dive Into One Key Gene
-
-To illustrate how regulatory network rewiring identified by PANDA manifests at the level of individual genes, we conducted a focused gene-centric analysis using EGFR, a well-established oncogene in lung adenocarcinoma. EGFR was selected based on its known biological relevance in LUAD and its involvement in signaling pathways identified in the network-level analyses.
-
-First, the Ensembl identifier corresponding to EGFR was obtained by mapping Ensembl gene IDs to official gene symbols using gene annotation metadata from the harmonized expression dataset. PANDA-derived TF–gene edges targeting EGFR were then extracted separately from the LUAD and GTEx regulatory networks.For each transcription factor targeting EGFR, we quantified regulatory rewiring by computing the difference in edge weights between the two networks (LUAD minus GTEx). These TF-specific differential targeting scores capture gains or losses of regulatory influence on EGFR in tumor tissue relative to normal lung. Transcription factors were ranked by the absolute magnitude of this difference to identify those exhibiting the strongest rewiring with respect to EGFR regulation.
-
-External biological annotation was incorporated to contextualize these findings. Public databases, including NCBI Gene and the UCSC Genome Browser, were used to summarize EGFR gene structure, known regulatory features, and functional roles in cancer. These annotations were integrated with PANDA-based results to provide a mechanistic interpretation of how altered transcription factor targeting may contribute to EGFR-driven oncogenic signaling in lung adenocarcinoma.
-
-# Analysis and Results
-
-## A. Exploratory Data Analysis 
-
-### Project Setup
-This code accesses a shared Google Drive folder using the googledrive package, lists all files within the folder, creates a local data directory, and downloads each file into that directory using its original filename, overwriting existing files to ensure reproducibility.
+## Project Setup
+Download TCGA and GTEX files to directory
 
 ```{r, warning=FALSE, message=FALSE}
 library(googledrive)
@@ -72,8 +38,8 @@ for (i in seq_len(nrow(files_list))) {
 }
 ```
 
-### Dataset Loading
-This code loads the required Bioconductor packages and defines a helper function to convert SummarizedExperiment objects into ExpressionSet objects for downstream analysis. The make_eset() function extracts expression matrices (log-transformed TPM and raw counts) from the assay data and combines them with sample-level metadata (phenoData) and gene-level annotations (featureData). Using this function, the TCGA lung adenocarcinoma and GTEx normal lung RNA-seq datasets are loaded from disk and converted into ExpressionSet objects, providing a standardized data structure compatible with legacy Bioconductor workflows such as limma, PCA, and clustering analyses.
+## Dataset Harmonization
+We will load the .rds files and convert into eset files. Here we will set logtpm to be the exprs level for now to run differential expression later. We will also append raw counts and normalized value into the eset dataset
 ```{r, warning=FALSE, message=FALSE}
 library(SummarizedExperiment)
 library(Biobase)
@@ -103,8 +69,6 @@ eset_luad <- make_eset(luad)
 eset_gtex <- make_eset(gtex_lung)
 ```
 
-### Dataset Harmonization
-This code harmonizes feature‐level and sample‐level metadata between the TCGA LUAD and GTEx lung ExpressionSet objects by aligning column names and filling missing fields with NA. It then restricts both datasets to their shared set of genes, labels samples by dataset of origin, and combines expression matrices, counts, and metadata into a single unified ExpressionSet for downstream integrative analysis.
 
 ```{r, warning=FALSE, message=FALSE}
 harmonize_cols <- function(df1, df2) {
@@ -146,9 +110,7 @@ combined_eset <- ExpressionSet(
 )
 ```
 
-### Count filtering
-
-This code converts log-transformed TPM values back to the original TPM scale, retrieves raw read counts, and filters genes based on expression prevalence and abundance. Genes are retained if they are expressed at TPM > 1 in at least 20% of samples and have counts > 10 in at least 50% of samples. The filtered gene set is then used to subset the combined ExpressionSet, producing a cleaner dataset for downstream analyses.
+## Count filtering
 
 ```{r, warning=FALSE, message=FALSE}
 tpm <- 2^(assayData(combined_eset)$log_tpm) - 1
@@ -161,8 +123,29 @@ keep_genes <-
 filtered_eset <- combined_eset[keep_genes, ]
 dim(filtered_eset)
 ```
+
+## Batch Correction
+```{r, warning=FALSE, message=FALSE}
+logtpm <- exprs(filtered_eset)
+batch  <- pData(filtered_eset)$dataset
+
+logtpm_corrected <- removeBatchEffect(logtpm, batch = batch)
+
+assayData(filtered_eset) <- assayDataNew(
+  exprs        = logtpm_corrected,
+  counts       = assayData(filtered_eset)$counts,
+  log_tpm      = assayData(filtered_eset)$log_tpm,
+  norm_logtpm  = logtpm_corrected
+)
+
+dim(exprs(filtered_eset))
+ls(assayData(filtered_eset))
+table(pData(filtered_eset)$dataset)
+colnames(fData(filtered_eset))
+#colnames(pData(filtered_eset))
+```
 ## Extracting Covariates of Interest
-This code harmonizes key clinical covariates across TCGA LUAD and GTEx lung samples. Age information from TCGA (continuous) and GTEx (categorical) is recoded into a common ordered age category variable, while sex is standardized across datasets. Tumor histology is assigned for TCGA samples with normal tissue labeled accordingly, and smoking status is collapsed into consistent categories (Never, Ever, Missing). The cleaned and harmonized clinical variables are then retained and reassigned to the filtered ExpressionSet for downstream adjusted analyses.
+
 ```{r, warning=FALSE, message=FALSE}
 pd <- pData(filtered_eset)
 
@@ -220,20 +203,43 @@ pData(filtered_eset) <- pd_clean
 ```
 
 ## Panda input Fix
-This code prepares batch-corrected expression data for PANDA network inference by aligning expression matrices with sample metadata, resolving identifier mismatches, and exporting properly formatted input files. Samples are first matched to the filtered ExpressionSet metadata to correctly subset LUAD and GTEx samples and avoid indexing errors. Ensembl gene IDs are then cleaned by removing version numbers to ensure compatibility with PANDA. Finally, the corrected expression matrices are reformatted into tab-delimited files with gene IDs as the first column and samples as columns, producing finalized LUAD and GTEx expression files suitable for downstream regulatory network analysis.
+
 ```{r, warning=FALSE, message=FALSE}
 library(Biobase) 
+
+# Assuming filtered_eset and logtpm_corrected have been correctly loaded into the environment
+
+# -----------------------------------------------
+# Step A: Resolve the issue of "logical subscript is too long"
+# -----------------------------------------------
 corrected_sample_ids <- colnames(logtpm_corrected)
 metadata_matched <- pData(filtered_eset)[corrected_sample_ids, ]
+
 luad_samples_final <- metadata_matched$dataset == "TCGA_LUAD"
 gtex_samples_final <- metadata_matched$dataset == "GTEX_LUNG"
+
 luad_corrected_expr <- logtpm_corrected[, luad_samples_final]
 gtex_corrected_expr <- logtpm_corrected[, gtex_samples_final]
+
+
+# -----------------------------------------------
+# Step B: Resolve the Ensembl ID version number issue (PANDA error cause)
+# -----------------------------------------------
+
+# Use the simplest sub function to remove the dot and everything after it
 rownames(luad_corrected_expr) <- sub("\\..*", "", rownames(luad_corrected_expr))
 rownames(gtex_corrected_expr) <- sub("\\..*", "", rownames(gtex_corrected_expr))
+
+
+# -----------------------------------------------
+# Step C: Format and resave the files
+# -----------------------------------------------
+
+# Format and save the LUAD file
 luad_panda_df <- as.data.frame(luad_corrected_expr)
 luad_panda_df$ID <- rownames(luad_panda_df)
-luad_panda_df <- luad_panda_df[, c(ncol(luad_panda_df), 1:(ncol(luad_panda_df)-1))] 
+luad_panda_df <- luad_panda_df[, c(ncol(luad_panda_df), 1:(ncol(luad_panda_df)-1))] # Move ID column to the first position
+
 write.table(
   luad_panda_df,
   file = "luad_corrected_expression_final.txt",
@@ -241,6 +247,8 @@ write.table(
   quote = FALSE,
   row.names = FALSE # Ensure R's internal row names are not written
 )
+
+# Format and save the GTEx file
 gtex_panda_df <- as.data.frame(gtex_corrected_expr)
 gtex_panda_df$ID <- rownames(gtex_panda_df)
 gtex_panda_df <- gtex_panda_df[, c(ncol(gtex_panda_df), 1:(ncol(gtex_panda_df)-1))]
@@ -252,10 +260,20 @@ write.table(
   quote = FALSE,
   row.names = FALSE
 )
+
+# --- Files have been resaved ---
+
+
+# --- Specific fix for GTEx file writing (using the most robust data.frame method) ---
+
+# 1. Reformat the GTEx data frame (using explicit column definition, no index reordering needed)
+# Ensure the ID column is the first column and only appears once.
 gtex_panda_df_fixed <- data.frame(
-  ID = rownames(gtex_corrected_expr),
-  as.data.frame(gtex_corrected_expr) 
+  ID = rownames(gtex_corrected_expr), # Explicitly define the ID column
+  as.data.frame(gtex_corrected_expr) # Followed by expression values for all samples
 )
+
+# 2. Overwrite and save the GTEx file
 write.table(
   gtex_panda_df_fixed,
   file = "gtex_corrected_expression_final.txt",
@@ -266,15 +284,14 @@ write.table(
 ```
 
 ## Principle Component Analysis
-This code performs principal component analysis (PCA) on the filtered LUAD–GTEx expression dataset before and after batch correction using log-TPM and normalized log-TPM values, respectively. It visualizes the first two principal components colored by dataset to assess batch effects and correction effectiveness, annotating each axis with the variance explained. Finally, the processed ExpressionSet is saved to disk for downstream analyses.
 ```{r, warning=FALSE, message=FALSE}
 library(ggfortify)
 library(limma)
 library(ggplot2)
 # PCA before batch correction
-PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["count"]]))
+PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["log_tpm"]]))
 # PCA after batch correction
-PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["logtpm"]]))
+PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["norm_logtpm"]]))
 
 
 #autoplot(PCA_filter_prebatch, data=pData(filtered_eset), colour="study",
@@ -310,7 +327,7 @@ saveRDS(filtered_eset, file = "luad_gtex_eset_1207.rds")
 ```
 
 
-```{r}
+```{r, echo=FALSE}
 pc_pre  <- PCA_filter_prebatch$x[,1]
 pc_post <- PCA_filter_postbatch$x[,1]
 
@@ -429,9 +446,9 @@ library(dendextend)
 Genes with zero variance across samples were excluded.
 Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
-```{r , echo=FALSE}
+```{r, echo=FALSE}
 ### 1. Extract expression matrix
-expr_mat <- assayData(filtered_eset)[["logtpm"]]
+expr_mat <- assayData(filtered_eset)[["norm_logtpm"]]
 
 # Drop zero-variance genes
 expr_mat <- expr_mat[apply(expr_mat, 1, var) > 0, ]
@@ -471,7 +488,7 @@ ann_colors <- list(
 )
 ```
 
-```{r}
+```{r, echo=FALSE}
 ### 6. Heatmap (precomputed clustering)
 pheatmap(
   expr_scaled,
@@ -498,7 +515,7 @@ pd$age_cat   <- factor(pd$age_cat)
 pd$smoking   <- factor(pd$smoking)
 pd$hist_type <- factor(pd$hist_type)
 pd$dataset   <- factor(pd$dataset)
-#expr <- assayData(filtered_eset)[["norm_logtpm"]]
+expr <- assayData(filtered_eset)[["norm_logtpm"]]
 mad_vals <- apply(expr, 1, mad)
 top_genes <- names(sort(mad_vals, decreasing = TRUE))[1:50]
 expr_top <- expr[top_genes, ]
@@ -517,7 +534,6 @@ pheatmap(
 )
 
 ```
-
 ```{r, warning=FALSE, message=FALSE}
 luad_idx <- pd$dataset == "TCGA_LUAD"
 
@@ -533,9 +549,8 @@ autoplot(
   labs(title = "LUAD transcriptional heterogeneity by histology and smoking")
 
 ```
-
 ```{r, warning=FALSE, message=FALSE}
-expr <- assayData(filtered_eset)[["logtpm"]]
+expr <- assayData(filtered_eset)[["norm_logtpm"]]
 
 # All genes by MAD
 mad_vals <- apply(expr, 1, mad)
@@ -556,7 +571,6 @@ plot(2:8, wss, type = "b",
      xlab = "Number of clusters (K)",
      ylab = "Total within-cluster sum of squares")
 ```
-
 ```{r, warning=FALSE, message=FALSE}
 set.seed(123)
 km_res <- kmeans(pc_mat, centers = 3, nstart = 100)
@@ -606,6 +620,7 @@ library(edgeR)
 library(gplots)
 library(Biobase)
 library(limma)
+library(ggplot2)
 
 #Load
 filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
@@ -622,65 +637,59 @@ table(coldata$group)
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-# Extract counts and metadata
-countdata <- assayData(filtered_eset)$counts
-coldata   <- as.data.frame(pData(filtered_eset))
+colnames(coldata)
+table(coldata$age_cat, coldata$dataset)
+#check numbers
+table(coldata$dataset, is.na(coldata$sex))
+table(coldata$dataset, is.na(coldata$age_cat))
 
-# Define tumor vs normal
-coldata$group <- factor(
-  ifelse(coldata$dataset == "TCGA_LUAD", "tumor", "normal"),
-  levels = c("normal", "tumor")
-)
-
-# Harmonize sex
-coldata$sex <- ifelse(
-  coldata$dataset == "GTEX_LUNG",
-  ifelse(coldata$gtex.sex == 1, "MALE", "FEMALE"),
-  coldata$tcga.cgc_case_gender
-)
-coldata$sex <- factor(coldata$sex, levels = c("FEMALE", "MALE"))
-
-# Harmonize age bins
-age_levels <- c("20-29","30-39","40-49","50-59","60-69","70-79","80-89")
-tcga_bins <- cut(
-  coldata$tcga.cgc_case_age_at_diagnosis,
-  breaks = c(20,30,40,50,60,70,80,90),
-  labels = age_levels,
-  right = FALSE
-)
-
-coldata$age_bin <- factor(
-  ifelse(coldata$dataset == "GTEx_LUNG", coldata$gtex.age, as.character(tcga_bins)),
-  levels = age_levels
-)
-
-# Keep complete cases for design variables
-design_vars <- c("sex", "age_bin", "group")
-keep <- complete.cases(coldata[, design_vars])
-
-coldata_filt   <- coldata[keep, ]
-countdata_filt <- countdata[, keep]
-stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
-
-# Table 1 summaries
+# Generate Table 1
 table(coldata_filt$dataset, coldata_filt$sex)
 table(coldata_filt$dataset, coldata_filt$age_bin)
 
-# Numeric age summary
-bin_medians <- c("20-29"=25,"30-39"=35,"40-49"=45,"50-59"=55,
-                 "60-69"=65,"70-79"=75,"80-89"=85)
+bin_medians <- c(
+  "20-29" = 25,
+  "30-39" = 35,
+  "40-49" = 45,
+  "50-59" = 55,
+  "60-69" = 65,
+  "70-79" = 75,
+  "80-89" = 85
+)
 
-coldata_filt$age_num <- bin_medians[as.character(coldata_filt$age_bin)]
-
-age_summary_by_group <- coldata_filt |>
-  dplyr::group_by(group) |>
-  dplyr::summarise(
+coldata$age_num <- bin_medians[ as.character(coldata$age_bin) ]
+age_summary_by_group <- coldata %>%
+  group_by(group) %>%
+  summarise(
     n = sum(!is.na(age_num)),
     mean_age = mean(age_num, na.rm = TRUE),
     sd_age = sd(age_num, na.rm = TRUE)
   )
+kable(
+  age_summary_by_group,
+  caption = "Mean (SD) Age by Tumor Status"
+)
+```
 
-knitr::kable(age_summary_by_group, caption = "Mean (SD) Age by Tumor Status")
+```{r, warning=FALSE, message=FALSE}
+# drop 20 samples with missing covariates
+vars_for_design <- c("sex", "age_cat", "group")
+
+keep <- complete.cases(coldata[, vars_for_design])
+table(keep)  
+
+coldata_filt   <- coldata[keep, ]
+countdata_filt <- countdata[, keep]
+
+for (v in vars_for_design) {
+  if (is.factor(coldata_filt[[v]]) && is.ordered(coldata_filt[[v]])) {
+    message(sprintf("Converting ordered factor '%s' to nominal factor", v))
+    coldata_filt[[v]] <- factor(coldata_filt[[v]], ordered = FALSE)
+  }
+}
+
+# sanity check
+stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
 
 dds <- DESeqDataSetFromMatrix(
   countData = round(countdata_filt),
@@ -726,6 +735,8 @@ colnames(df)[1:2] <- c("x", "y")
 ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
   coord_fixed() + facet_grid( . ~ transformation) 
 ```
+
+
 ```{r}
 dds <- DESeq(dds)
 res <- results(dds)
@@ -1040,7 +1051,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 ## PCA DEA genes - padj \< 0.1
 
 ```{r}
-expr_mat <- assayData(filtered_eset)$logtpm  #batch-corrected matrix
+expr_mat <- assayData(filtered_eset)$log_tpm  
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
@@ -1059,8 +1070,6 @@ df_pca <- data.frame(
   group = coldata_filt$group   # same samples as 'keep'
 )
 
-library(ggplot2)
-
 ggplot(df_pca, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
@@ -1070,7 +1079,7 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 
 ```
 
-## Cluster analysis
+## Cluster analysis - padj \< 0.1
 
 ```{r}
 mydata <- t(expr_deg_scaled)
@@ -1095,7 +1104,7 @@ cluster_df <- data.frame(
 ggplot(cluster_df, aes(x = cluster)) +
   geom_bar(fill = "steelblue") +
   theme_bw() +
-  labs(title = "Sample Count per K-means Cluster (k = 6)",
+  labs(title = "Sample Count per K-means Cluster (k = 6), padj < 0.1",
        x = "Cluster", y = "Number of Samples")
 
 df_pca$cluster <- factor(fit$cluster)
@@ -1103,57 +1112,68 @@ df_pca$cluster <- factor(fit$cluster)
 ggplot(df_pca, aes(PC1, PC2, color = cluster)) +
   geom_point(size=3) +
   theme_bw() +
-  labs(title = "K-means Clusters Shown on PCA Space")
+  labs(title = "K-means Clusters Shown on PCA Space, padj < 0.1")
 ```
 
 ## PCA DEA genes - padj \< 0.05 & log2 \> 2
 
 ```{r}
-deg_ids <- rownames(sig_deseq_strict)   
-deg_ids <- intersect(deg_ids, rownames(expr_mat))
+deg_ids_strict <- rownames(sig_deseq_strict)   
+deg_ids_strict <- intersect(deg_ids_strict, rownames(expr_mat))
 
-expr_deg <- expr_mat[deg_ids, keep, drop = FALSE]
+expr_deg_strict <- expr_mat[deg_ids_strict, keep, drop = FALSE]
+expr_deg_strict_scaled <- t(scale(t(expr_deg_strict)))
 
-# scale by gene
-expr_deg_scaled <- t(scale(t(expr_deg)))
+pca_deg_strict <- prcomp(t(expr_deg_strict_scaled), center = FALSE, scale. = FALSE)
 
-# PCA
-pca_deg <- prcomp(t(expr_deg_scaled), center = FALSE, scale. = FALSE)
-
-df_pca <- data.frame(
-  PC1 = pca_deg$x[, 1],
-  PC2 = pca_deg$x[, 2],
-  group = coldata_filt$group   # same samples as 'keep'
+df_pca_strict <- data.frame(
+  PC1 = pca_deg_strict$x[, 1],
+  PC2 = pca_deg_strict$x[, 2],
+  group = coldata_filt$group
 )
 
-library(ggplot2)
-
-ggplot(df_pca, aes(PC1, PC2, color = group)) +
+ggplot(df_pca_strict, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
   ggtitle("PCA using DESeq2 DEGs only, padj < 0.05 & log2 > 2") +
-  xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
-  ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
+  xlab(paste0("PC1 (", round(summary(pca_deg_strict)$importance[2,1] * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(summary(pca_deg_strict)$importance[2,2] * 100, 1), "%)"))
 ```
 
+## Cluster analysis - padj \< 0.05 & log2 \> 2
 
 ```{r}
-cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
-dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
+mydata <- t(expr_deg_scaled)
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
 
-hc_genes <- hclust(dist_mat, method = "average")
+# K-Means Cluster Analysis
+fit <- kmeans(mydata, 4) # 4-cluster solution
+# get cluster means 
+aggregate(mydata,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(mydata, fit$cluster)
 
-k_modules <- 6
-gene_modules <- cutree(hc_genes, k = k_modules)
-
-table(gene_modules)
-
-deg_modules_df <- data.frame(
-  gene_id  = names(gene_modules),
-  module   = as.factor(gene_modules),
-  stringsAsFactors = FALSE
+cluster_df <- data.frame(
+  sample  = rownames(mydata),
+  cluster = factor(fit$cluster)
 )
-# head(deg_modules_df)
+
+ggplot(cluster_df, aes(x = cluster)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() +
+  labs(title = "Sample Count per K-means Cluster (k = 4), padj < 0.05 & log2 > 2",
+       x = "Cluster", y = "Number of Samples")
+
+df_pca_strict$cluster <- factor(fit$cluster)
+
+ggplot(df_pca_strict, aes(PC1, PC2, color = cluster)) +
+  geom_point(size=3) +
+  theme_bw() +
+  labs(title = "K-means Clusters Shown on PCA Space, padj < 0.05 & log2 > 2")
 ```
 
 
@@ -1167,7 +1187,7 @@ pd$smoking   <- factor(pd$smoking)
 pd$hist_type <- factor(pd$hist_type)
 pd$dataset   <- factor(pd$dataset)
 
-expr <- assayData(filtered_eset)[["logtpm"]]
+expr <- assayData(filtered_eset)[["norm_logtpm"]]
 
 # restrict to DEG module
 deg_mod <- intersect(deg_ids, rownames(expr))
@@ -1220,7 +1240,7 @@ We performed differential expression analysis (DEA) using both DESeq2 and limma-
 
 Both methods revealed a system-wide shift in gene expression between tumor (TCGA-LUAD) and normal (GTEx lung) samples. However, this pattern likely reflects systematic differences between data sources—such as technical, procedural, or cohort-level variation—rather than purely biological differences. Because the dataset indicator (TCGA vs. GTEx) is perfectly colinear with case status (tumor vs. normal), batch effect and phenotype cannot be disentangled. For this reason, both DESeq2 and limma-voom were run not using the batch-corrected expression values. Correcting for dataset batch would have removed the tumor–normal contrast entirely.
 
-PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. The clustering analyses also failed to detect meaningful clusters due to this data limitation.
+PCA restricted to DEGs also showed separation similar to the global PCA, suggesting that most differential expression signal reflects dataset-specific variation rather than tumor-specific transcriptional changes. When we restricted the sample to a more stringent threshold, the PCA separation became cleaner, suggesting the genes with both small p values and high log fold change may be driving the true biological signals.
 
 Interpretation of the results should therefore be made with caution, as significant findings may partially reflect inter-dataset technical differences rather than true tumor-specific transcriptional changes.
 
@@ -1451,48 +1471,19 @@ fi
 echo "PANDA script finished."
 ```
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  message = FALSE,
-  warning = FALSE
-)
-set.seed(2025)
-```
-
 ## Load libraries
 ```{r}
 library(data.table)
 library(tidyverse)
 library(ggtext)
-library(ggraph)
 library(fgsea)
 library(visNetwork)
 ```
 
 ## Import PANDA edge lists
 ```{r}
-folder_url <- "https://drive.google.com/drive/folders/1S8QpY-h28HXIjFvx6uUkkurzDkBlJ3KT"
-folder <- drive_get(as_id(folder_url))
-files <- drive_ls(folder)
-
-drive_download(
-  file = files %>% filter(name == "output_panda_GTEx_final.txt"),
-  path = "output_panda_GTEx_final.txt",
-  overwrite = TRUE
-)
-
-drive_download(
-  file = files %>% filter(name == "output_panda_LUAD_final.txt"),
-  path = "output_panda_LUAD_final.txt",
-  overwrite = TRUE
-)
-
-panda_gtex <- fread("output_panda_GTEx_final.txt")
-panda_luad <- fread("output_panda_LUAD_final.txt")
-
-# panda_luad <- fread("data/output_panda_LUAD_final.txt")
-# panda_gtex <- fread("data/output_panda_GTEx_final.txt")
+panda_luad <- fread("data/output_panda_LUAD_final.txt")
+panda_gtex <- fread("data/output_panda_GTEx_final.txt")
 
 stopifnot(all(c("tf","gene","force") %in% names(panda_luad)))
 stopifnot(all(c("tf","gene","force") %in% names(panda_gtex)))
@@ -1546,74 +1537,41 @@ plot_top_edges(panda_gtex, n = 200, title = "GTEx Lung: top edges")
 
 ## Differential edges network (LUAD − GTEx)
 ```{r}
-top_pos <- 50
-top_neg <- 50
+nDiffs <- 100   # top differential edges to plot
 
-# Ensure keys
 setkey(panda_luad, tf, gene)
 setkey(panda_gtex, tf, gene)
 
-# Compute delta (LUAD - GTEx)
 diff <- panda_luad[panda_gtex, nomatch = 0]
-diff[, delta := force - i.force]
+diff[, delta := force - i.force]  # LUAD - GTEx
 
-# --- select top positive and top negative deltas ---
-top_pos_dt <- diff[delta > 0][order(-delta)][1:top_pos, .(from = tf, to = gene, delta)]
-top_neg_dt <- diff[delta < 0][order(delta)][1:top_neg, .(from = tf, to = gene, delta)]
+edges <- data.frame(from = character(nDiffs),
+                    to   = character(nDiffs),
+                    value= numeric(nDiffs),
+                    stringsAsFactors = FALSE)
 
-topdiff <- rbind(top_pos_dt, top_neg_dt)
+topdiff <- diff[order(-abs(delta))][1:nDiffs, .(tf, gene, delta)]
 
-# (optional) de-duplicate exact same edge if it somehow appears twice
-topdiff <- unique(topdiff, by = c("from", "to"))
+edges$from   <- topdiff$tf
+edges$to     <- topdiff$gene
+edges$arrows <- "to"
+edges$color  <- ifelse(topdiff$delta > 0, "green", "red")
+edges$value  <- abs(topdiff$delta)  
 
-# Build node table (TF vs gene)
 nodes <- data.frame(
-  name = unique(c(topdiff$from, topdiff$to)),
+  id    = unique(c(edges$from, edges$to)),
+  label = unique(c(edges$from, edges$to)),
   stringsAsFactors = FALSE
 )
-nodes$type <- ifelse(nodes$name %in% topdiff$from, "TF", "gene")
+nodes$group <- ifelse(nodes$id %in% edges$from, "TF", "gene")
 
-# Build igraph object
-g <- graph_from_data_frame(as.data.frame(topdiff), directed = TRUE, vertices = nodes)
-
-# Plot
-p_net <- ggraph(g, layout = "fr") +
-  geom_edge_fan(
-    aes(
-      edge_width  = abs(delta),
-      edge_alpha  = abs(delta),
-      edge_colour = delta > 0
-    ),
-    arrow   = arrow(length = unit(2.5, "mm"), type = "closed"),
-    end_cap = circle(3, "mm")
-  ) +
-  geom_node_point(aes(shape = type), size = 4) +
-  geom_node_text(aes(label = name), repel = TRUE, size = 3) +
-  scale_edge_width(range = c(0.3, 2.2), guide = "none") +
-  scale_edge_alpha(range = c(0.25, 0.9), guide = "none") +
-  scale_edge_colour_manual(
-    values = c(`TRUE` = "#B2182B", `FALSE` = "#2166AC"),
-    labels = c(`TRUE` = "Higher targeting in LUAD", `FALSE` = "Lower targeting in LUAD"),
-    name = "Direction"
-  ) +
-  scale_shape_manual(values = c(TF = 17, gene = 16), name = "Node type") +
-  theme_void(base_size = 12) +
-  theme(
-    legend.position = "right",
-    plot.title = element_text(face = "bold")
-  ) +
-  labs(
-    title = paste0(
-      "Top differential PANDA edges (LUAD − GTEx): ",
-      top_pos, " positive + ", top_neg, " negative"
-    ),
-    caption = "Edge color shows direction; edge thickness/alpha shows |Δ targeting|."
-  )
-
-print(p_net)
+net <- visNetwork(nodes, edges, width = "100%")
+net <- visGroups(net, groupname = "TF", shape = "triangle",
+                 color = list(background = "purple", border = "black"))
+net <- visGroups(net, groupname = "gene", shape = "dot",
+                 color = list(background = "teal", border = "black"))
+visLegend(net, main = "Legend", position = "right", ncol = 1)
 ```
-Comparison of PANDA-inferred regulatory networks between LUAD and normal lung (GTEx) revealed pronounced transcriptional rewiring at the level of individual TF–gene interactions. Shown are the 50 TF–gene edges with the largest positive and the 50 with the largest negative differences in edge weight (LUAD − GTEx), representing gains and losses of regulatory targeting in tumor tissue, respectively. The network highlights several transcription factors that act as hubs with multiple strongly rewired edges, indicating coordinated shifts in their regulatory influence across many target genes. Notably, both increased and decreased targeting relationships are observed, suggesting that LUAD-associated regulatory reprogramming involves selective strengthening of oncogenic regulatory links alongside attenuation of normal lung regulatory programs. Edge thickness reflects the magnitude of regulatory change, emphasizing that a subset of TF–gene pairs undergo particularly large alterations in inferred regulatory strength between tumor and normal tissue.
-
 
 ## TF targeting metrics (global rewiring)
 ```{r}
@@ -1706,7 +1664,8 @@ visLegend(net, main = paste0("Key TF: ", key_tf, " (top ", nEdges, " Δ edges)")
 
 ## Load KEGG pathways and build ENSEMBL to SYMBOL map
 ```{r}
-pathways <- gmtPathways("c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt")
+setwd("/Users/yuzhang1112/Documents/BST280/bst280group5")
+pathways <- gmtPathways("data/c2.cp.kegg_legacy.v2025.1.Hs.symbols.gmt")
 
 fd <- as.data.table(fData(filtered_eset), keep.rownames = "ensembl")
 
@@ -1844,8 +1803,6 @@ p_heat <- ggplot(heat_dt, aes(x = tf, y = pathway_clean, fill = NES)) +
 
 p_heat
 ```
-TF-specific secondary GSEA revealed coherent pathway-level patterns associated with differential regulatory targeting in LUAD relative to normal lung. Across the top differentially targeting transcription factors, increased targeting in LUAD was consistently observed for pathways involved in RNA processing and oncogenic signaling, including the spliceosome, ERBB signaling, neurotrophin signaling, and endocytosis. In contrast, multiple immune- and homeostasis-related pathways—such as cytokine–cytokine receptor interaction, hematopoietic cell lineage, intestinal immune network for IgA production, and complement and coagulation cascades—showed reduced targeting in LUAD across several TFs. Notably, these pathway-level shifts were reproducible across multiple regulators, indicating coordinated regulatory rewiring rather than isolated TF-specific effects. All pathway enrichments shown remained significant after global multiple-testing correction, supporting the robustness of these regulatory changes.
-
 
 ## Bubble plot (top 2 TFs; global FDR)
 ```{r bubble-top2, fig.width=11, fig.height=8}
@@ -1968,5 +1925,16 @@ egfr_tf_path <- fgseaRes_all[
 head(egfr_tf_path, 30)
 ```
 
+6. Deep Dive Into a Key Gene: EGFR
+6.1 Functional Overview and Clinical Relevance
+To understand the mechanistic drivers of Lung Adenocarcinoma (LUAD), we performed a high-resolution analysis of EGFR (Epidermal Growth Factor Receptor). According to NCBI Gene documentation, EGFR is a member of the protein kinase superfamily and encodes a transmembrane glycoprotein. The receptor is activated by binding to epidermal growth factor family members, inducing dimerization and autophosphorylation that ultimately triggers cell proliferation. Pathologically, mutations in EGFR are classically associated with lung cancer development and the orchestration of inflammatory signaling.
 
+6.2 Genomic Architecture and Regulatory Landscapes
+We utilized the UCSC Genome Browser to map the physical regulatory landscape of the EGFR locus on Chromosome 7p11.2. The locus exhibits significant structural complexity, featuring 32 exons and multiple curated RefSeq and GENCODE isoforms. The Layered H3K27Ac track from ENCODE reveals high-intensity enrichment at the canonical promoter and upstream regions. Since H3K27Ac is a hallmark of active promoters and enhancers, these peaks represent accessible "genomic gates" where transcription factors can readily bind. Furthermore, the Cons 100 Verts track highlights that these regulatory sequences are highly conserved across vertebrates, underscoring their critical biological function.
+
+6.3 PANDA Regulatory Rewiring Analysis
+Our PANDA network modeling provides a computational explanation for the aberrant activation of EGFR in the tumor state. By comparing LUAD (Cancer) and GTEx (Normal) networks, we identified a profound reorganization of the transcription factors targeting the EGFR gene. Transcription factors such as ZNF334, FOXF1, and ARID3A showed the most significant increase in targeting force in LUAD. The differential targeting data identifies ZNF334 as a top positive regulator gaining influence in the cancer network, while several homeostatic transcription factors exhibited a loss of targeting force, suggesting a breakdown of normal regulatory constraints. Notably, FOXF1, which gains targeting force toward EGFR, is also significantly enriched in the KEGG Ubiquitin Mediated Proteolysis pathway. This suggests a coordinated oncogenic program where rewired transcription factors simultaneously increase EGFR production and potentially alter its degradation pathways to maintain sustained growth signaling.
+
+6.4 Conclusion
+The synergy between the physical landscape of UCSC H3K27Ac peaks and the network dynamics of PANDA targeting force confirms that EGFR acts as a central hub for transcriptional reprogramming in LUAD. The cancer-specific hijacking of these conserved regulatory elements by rewired transcription factors provides a robust mechanistic explanation for the elevated EGFR activity observed in patient samples, linking epigenetic accessibility directly to oncogenic signaling.
 

@@ -1,5 +1,5 @@
 ---
-title: "BST280_DEA"
+title: "Individual write up"
 author: "Siwen Wang"
 format: html
 editor: visual
@@ -26,6 +26,7 @@ library(edgeR)
 library(gplots)
 library(Biobase)
 library(limma)
+library(knitr)
 
 #Load
 filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
@@ -93,6 +94,7 @@ coldata$age_bin <- ifelse(
 
 coldata$age_bin <- factor(coldata$age_bin,
                           levels = c("20-29","30-39","40-49","50-59","60-69","70-79", "80-89"))
+
 table(coldata$age_bin, coldata$dataset)
 ```
 
@@ -124,6 +126,35 @@ dds <- DESeqDataSetFromMatrix(
 dds
 nrow(dds)
 # saveRDS(dds, file = "data/dds.rds") # export for Emily
+```
+
+```{r}
+# Generate Table 1
+table(coldata_filt$dataset, coldata_filt$sex)
+table(coldata_filt$dataset, coldata_filt$age_bin)
+
+bin_medians <- c(
+  "20-29" = 25,
+  "30-39" = 35,
+  "40-49" = 45,
+  "50-59" = 55,
+  "60-69" = 65,
+  "70-79" = 75,
+  "80-89" = 85
+)
+
+coldata$age_num <- bin_medians[ as.character(coldata$age_bin) ]
+age_summary_by_group <- coldata %>%
+  group_by(group) %>%
+  summarise(
+    n = sum(!is.na(age_num)),
+    mean_age = mean(age_num, na.rm = TRUE),
+    sd_age = sd(age_num, na.rm = TRUE)
+  )
+kable(
+  age_summary_by_group,
+  caption = "Mean (SD) Age by Tumor Status"
+)
 ```
 
 # DESeq2
@@ -192,7 +223,7 @@ table(res.05$padj < 0.05)
 ```{r}
 #Raise the log2 fold change threshold to 2
 resLFC2 <- results(dds, lfcThreshold=2)
-table(resLFC2$padj < 0.1)
+table(resLFC2$padj < 0.05)
 ```
 
 ```{r}
@@ -209,26 +240,24 @@ head(resSig[ order(-resSig$log2FoldChange), ])
 
 ```{r}
 res.noshr <- results(dds, name="group_tumor_vs_normal")
-DESeq2::plotMA(res.noshr, ylim = c(-5, 5))
+DESeq2::plotMA(res.noshr, ylim = c(-10, 10))
 ```
 
 ```{r}
-resultsNames(dds)
-res_shrunk <- lfcShrink(dds, coef="group_tumor_vs_normal", type="apeglm")
-DESeq2::plotMA(res_shrunk, ylim = c(-5, 5))
+# A strict threshold that with shrinkage
+res_shrunk <- lfcShrink(dds, coef = "group_tumor_vs_normal", type = "apeglm")
+
+res_shrunk_strict <- res_shrunk[
+  !is.na(res_shrunk$padj) &
+    res_shrunk$padj < 0.05 &
+    abs(res_shrunk$log2FoldChange) > 2,
+]
+
+DESeq2::plotMA(res_shrunk_strict, ylim = c(-10, 10))
 ```
 
 ```{r}
-DESeq2::plotMA(res_shrunk, ylim = c(-5,5))
-topGene <- rownames(res_shrunk)[which.min(res_shrunk$padj)]
-with(res_shrunk[topGene, ], {
-  points(baseMean, log2FoldChange, col="dodgerblue", cex=2, lwd=2)
-  text(baseMean, log2FoldChange, topGene, pos=2, col="dodgerblue")
-})
-```
-
-```{r}
-hist(res$pvalue[res_shrunk$baseMean > 1], breaks = 0:20/20,
+hist(res$pvalue[res$baseMean > 1], breaks = 0:20/20,
      col = "grey50", border = "white",main='P-value histogram')
 ```
 
@@ -285,6 +314,11 @@ plotSA(fit_limma, main="Final model mean-variance trend")
 ## Plotting results
 
 ```{r}
+#Explore results
+sum(res_limma$adj.P.Val < 0.05)
+```
+
+```{r}
 # Find the number of genes differentially expressed under a defined thereshold (FDR<0.05 and absolute log fold-change greater than 2).
 sum(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 2)
 ```
@@ -316,8 +350,15 @@ plot(x=res_limma$AveExpr, y=res_limma$logFC, xlab="Average log-expression", ylab
 
 ```{r, message=FALSE, warning=FALSE}
 # Heatmap with top 20 differentially expressed genes
-top_genes <- rownames(res_limma)[1:20]
-mat <- v$E[top_genes, ]
+y <- DGEList(counts = countdata_filt)
+y <- calcNormFactors(y)
+
+logcpm0 <- log2(cpm(y) + 1)   # forces min = 0
+
+res_filt <- subset(res_limma, adj.P.Val < 0.05 & abs(logFC) > 2)
+top_genes <- rownames(res_filt)[1:20]
+#mat <- v$E[top_genes, ]
+mat <- logcpm0[top_genes, ]
 
 # Create color bar with group information
 cols <- coldata_filt$group
@@ -423,7 +464,7 @@ venn_mat <- cbind(
 )
 rownames(venn_mat) <- all_genes
 
-vennDiagram(venn_mat, main = "DESeq2 vs limma-voom")
+vennDiagram(venn_mat, main = "DESeq2 vs limma-voom, padj < 0.1")
 ```
 
 ## More stringent results - padj \< 0.05 & log2 \> 2
@@ -470,7 +511,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 ## PCA DEA genes - padj \< 0.1
 
 ```{r}
-expr_mat <- assayData(filtered_eset)$norm_logtpm  #batch-corrected matrix
+expr_mat <- assayData(filtered_eset)$log_tpm  
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
@@ -489,8 +530,6 @@ df_pca <- data.frame(
   group = coldata_filt$group   # same samples as 'keep'
 )
 
-library(ggplot2)
-
 ggplot(df_pca, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
@@ -500,57 +539,110 @@ ggplot(df_pca, aes(PC1, PC2, color = group)) +
 
 ```
 
-## Cluster analysis
+## Cluster analysis - padj \< 0.1
 
 ```{r}
-cor_mat   <- cor(t(expr_deg_scaled), method = "pearson")   # gene x gene
-dist_mat  <- as.dist(1 - cor_mat)                          # convert to distance
+mydata <- t(expr_deg_scaled)
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
+```
 
-hc_genes <- hclust(dist_mat, method = "average")
+```{r}
+# K-Means Cluster Analysis
+fit <- kmeans(mydata, 6) # 6-cluster solution
+# get cluster means 
+aggregate(mydata,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(mydata, fit$cluster)
 
-k_modules <- 6
-gene_modules <- cutree(hc_genes, k = k_modules)
-
-table(gene_modules)
-
-deg_modules_df <- data.frame(
-  gene_id  = names(gene_modules),
-  module   = as.factor(gene_modules),
-  stringsAsFactors = FALSE
+cluster_df <- data.frame(
+  sample  = rownames(mydata),
+  cluster = factor(fit$cluster)
 )
-# head(deg_modules_df)
-# Cluster analysis failed
+
+ggplot(cluster_df, aes(x = cluster)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() +
+  labs(title = "Sample Count per K-means Cluster (k = 6)",
+       x = "Cluster", y = "Number of Samples")
+```
+
+```{r}
+df_pca$cluster <- factor(fit$cluster)
+
+ggplot(df_pca, aes(PC1, PC2, color = cluster)) +
+  geom_point(size=3) +
+  theme_bw() +
+  labs(title = "K-means Clusters Shown on PCA Space")
 ```
 
 ## PCA DEA genes - padj \< 0.05 & log2 \> 2
 
 ```{r}
-deg_ids <- rownames(sig_deseq_strict)   
-deg_ids <- intersect(deg_ids, rownames(expr_mat))
+deg_ids_strict <- rownames(sig_deseq_strict)   
+deg_ids_strict <- intersect(deg_ids_strict, rownames(expr_mat))
 
-expr_deg <- expr_mat[deg_ids, keep, drop = FALSE]
+expr_deg_strict <- expr_mat[deg_ids_strict, keep, drop = FALSE]
+expr_deg_strict_scaled <- t(scale(t(expr_deg_strict)))
 
-# scale by gene
-expr_deg_scaled <- t(scale(t(expr_deg)))
+pca_deg_strict <- prcomp(t(expr_deg_strict_scaled), center = FALSE, scale. = FALSE)
 
-# PCA
-pca_deg <- prcomp(t(expr_deg_scaled), center = FALSE, scale. = FALSE)
-
-df_pca <- data.frame(
-  PC1 = pca_deg$x[, 1],
-  PC2 = pca_deg$x[, 2],
-  group = coldata_filt$group   # same samples as 'keep'
+df_pca_strict <- data.frame(
+  PC1 = pca_deg_strict$x[, 1],
+  PC2 = pca_deg_strict$x[, 2],
+  group = coldata_filt$group
 )
 
-library(ggplot2)
-
-ggplot(df_pca, aes(PC1, PC2, color = group)) +
+ggplot(df_pca_strict, aes(PC1, PC2, color = group)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_bw(base_size = 14) +
   ggtitle("PCA using DESeq2 DEGs only, padj < 0.05 & log2 > 2") +
-  xlab(paste0("PC1 (", round(summary(pca_deg)$importance[2,1] * 100, 1), "%)")) +
-  ylab(paste0("PC2 (", round(summary(pca_deg)$importance[2,2] * 100, 1), "%)"))
+  xlab(paste0("PC1 (", round(summary(pca_deg_strict)$importance[2,1] * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(summary(pca_deg_strict)$importance[2,2] * 100, 1), "%)"))
 
+```
+
+## Cluster analysis - padj \< 0.05 & log2 \> 2
+
+```{r}
+mydata <- t(expr_deg_strict_scaled)
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(mydata, 
+  	centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares")
+```
+
+```{r}
+# K-Means Cluster Analysis
+fit <- kmeans(mydata, 4) # 4-cluster solution
+# get cluster means 
+aggregate(mydata,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+mydata <- data.frame(mydata, fit$cluster)
+
+cluster_df <- data.frame(
+  sample  = rownames(mydata),
+  cluster = factor(fit$cluster)
+)
+
+ggplot(cluster_df, aes(x = cluster)) +
+  geom_bar(fill = "steelblue") +
+  theme_bw() +
+  labs(title = "Sample Count per K-means Cluster (k = 4)",
+       x = "Cluster", y = "Number of Samples")
+```
+
+```{r}
+df_pca_strict$cluster <- factor(fit$cluster)
+
+ggplot(df_pca_strict, aes(PC1, PC2, color = cluster)) +
+  geom_point(size=3) +
+  theme_bw() +
+  labs(title = "K-means Clusters Shown on PCA Space, padj < 0.05 & log2 > 2")
 ```
 
 # Summary of results
