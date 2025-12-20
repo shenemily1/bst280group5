@@ -2,13 +2,20 @@
 title: "BST280_Group5_RnaSeq_Adeno_Normal"
 author: "Peter Lin, Siwen Wang, Emily Shen, Chris Deng, Yu Zhang"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 # Introduction
+Lung adenocarcinoma (LUAD) is the most common histologic subtype of lung cancer and remains a leading cause of cancer-related mortality worldwide, driven by complex molecular alterations that extend beyond single gene mutations to coordinated dysregulation of transcriptional programs and regulatory networks. Large-scale transcriptomic resources such as The Cancer Genome Atlas (TCGA) and the Genotype-Tissue Expression (GTEx) project provide a unique opportunity to systematically compare tumor and normal lung tissue at the genome-wide expression level and to interrogate mechanisms underlying malignant transformation. 
 
+While prior studies have identified recurrent oncogenic pathways and driver genes in LUAD, less is understood about how transcription factor–target interactions are globally rewired in cancer relative to normal lung tissue. In this study, we propose an integrative comparative transcriptomic and network-based analysis of TCGA LUAD and GTEx normal lung samples to characterize differential gene expression patterns, pathway enrichment, and transcriptional regulatory architecture. By combining dimensionality reduction, differential expression analysis, gene set enrichment, and PANDA-based network inference, this work aims to identify key dysregulated pathways and transcription factors that jointly distinguish LUAD from normal lung tissue and provide insight into the regulatory mechanisms underlying lung tumorigenesis
 
 # Methods
+
+## A. Exploratory Data Analysis 
+
 
 ## E. Regulatory Network Inference Using PANDA
 To characterize transcriptional regulatory architecture in lung adenocarcinoma and normal lung tissue, we inferred gene regulatory networks using PANDA (Passing Attributes between Networks for Data Assimilation). PANDA integrates three complementary data layers: (i) gene expression profiles, (ii) transcription factor (TF)–gene motif prior information, and (iii) protein–protein interaction (PPI) data among transcription factors. This framework enables estimation of condition-specific regulatory interactions while leveraging prior biological knowledge.
@@ -41,8 +48,10 @@ External biological annotation was incorporated to contextualize these findings.
 
 # Analysis and Results
 
-## Project Setup
-Download TCGA and GTEX files to directory
+## A. Exploratory Data Analysis 
+
+### Project Setup
+This code accesses a shared Google Drive folder using the googledrive package, lists all files within the folder, creates a local data directory, and downloads each file into that directory using its original filename, overwriting existing files to ensure reproducibility.
 
 ```{r, warning=FALSE, message=FALSE}
 library(googledrive)
@@ -63,8 +72,8 @@ for (i in seq_len(nrow(files_list))) {
 }
 ```
 
-## Dataset Harmonization
-We will load the .rds files and convert into eset files. Here we will set logtpm to be the exprs level for now to run differential expression later. We will also append raw counts and normalized value into the eset dataset
+### Dataset Loading
+This code loads the required Bioconductor packages and defines a helper function to convert SummarizedExperiment objects into ExpressionSet objects for downstream analysis. The make_eset() function extracts expression matrices (log-transformed TPM and raw counts) from the assay data and combines them with sample-level metadata (phenoData) and gene-level annotations (featureData). Using this function, the TCGA lung adenocarcinoma and GTEx normal lung RNA-seq datasets are loaded from disk and converted into ExpressionSet objects, providing a standardized data structure compatible with legacy Bioconductor workflows such as limma, PCA, and clustering analyses.
 ```{r, warning=FALSE, message=FALSE}
 library(SummarizedExperiment)
 library(Biobase)
@@ -94,6 +103,8 @@ eset_luad <- make_eset(luad)
 eset_gtex <- make_eset(gtex_lung)
 ```
 
+### Dataset Harmonization
+This code harmonizes feature‐level and sample‐level metadata between the TCGA LUAD and GTEx lung ExpressionSet objects by aligning column names and filling missing fields with NA. It then restricts both datasets to their shared set of genes, labels samples by dataset of origin, and combines expression matrices, counts, and metadata into a single unified ExpressionSet for downstream integrative analysis.
 
 ```{r, warning=FALSE, message=FALSE}
 harmonize_cols <- function(df1, df2) {
@@ -135,7 +146,9 @@ combined_eset <- ExpressionSet(
 )
 ```
 
-## Count filtering
+### Count filtering
+
+This code converts log-transformed TPM values back to the original TPM scale, retrieves raw read counts, and filters genes based on expression prevalence and abundance. Genes are retained if they are expressed at TPM > 1 in at least 20% of samples and have counts > 10 in at least 50% of samples. The filtered gene set is then used to subset the combined ExpressionSet, producing a cleaner dataset for downstream analyses.
 
 ```{r, warning=FALSE, message=FALSE}
 tpm <- 2^(assayData(combined_eset)$log_tpm) - 1
@@ -148,29 +161,8 @@ keep_genes <-
 filtered_eset <- combined_eset[keep_genes, ]
 dim(filtered_eset)
 ```
-
-## Batch Correction
-```{r, warning=FALSE, message=FALSE}
-logtpm <- exprs(filtered_eset)
-batch  <- pData(filtered_eset)$dataset
-
-logtpm_corrected <- removeBatchEffect(logtpm, batch = batch)
-
-assayData(filtered_eset) <- assayDataNew(
-  exprs        = logtpm_corrected,
-  counts       = assayData(filtered_eset)$counts,
-  log_tpm      = assayData(filtered_eset)$log_tpm,
-  norm_logtpm  = logtpm_corrected
-)
-
-dim(exprs(filtered_eset))
-ls(assayData(filtered_eset))
-table(pData(filtered_eset)$dataset)
-colnames(fData(filtered_eset))
-#colnames(pData(filtered_eset))
-```
 ## Extracting Covariates of Interest
-
+This code harmonizes key clinical covariates across TCGA LUAD and GTEx lung samples. Age information from TCGA (continuous) and GTEx (categorical) is recoded into a common ordered age category variable, while sex is standardized across datasets. Tumor histology is assigned for TCGA samples with normal tissue labeled accordingly, and smoking status is collapsed into consistent categories (Never, Ever, Missing). The cleaned and harmonized clinical variables are then retained and reassigned to the filtered ExpressionSet for downstream adjusted analyses.
 ```{r, warning=FALSE, message=FALSE}
 pd <- pData(filtered_eset)
 
@@ -228,43 +220,20 @@ pData(filtered_eset) <- pd_clean
 ```
 
 ## Panda input Fix
-
+This code prepares batch-corrected expression data for PANDA network inference by aligning expression matrices with sample metadata, resolving identifier mismatches, and exporting properly formatted input files. Samples are first matched to the filtered ExpressionSet metadata to correctly subset LUAD and GTEx samples and avoid indexing errors. Ensembl gene IDs are then cleaned by removing version numbers to ensure compatibility with PANDA. Finally, the corrected expression matrices are reformatted into tab-delimited files with gene IDs as the first column and samples as columns, producing finalized LUAD and GTEx expression files suitable for downstream regulatory network analysis.
 ```{r, warning=FALSE, message=FALSE}
 library(Biobase) 
-
-# Assuming filtered_eset and logtpm_corrected have been correctly loaded into the environment
-
-# -----------------------------------------------
-# Step A: Resolve the issue of "logical subscript is too long"
-# -----------------------------------------------
 corrected_sample_ids <- colnames(logtpm_corrected)
 metadata_matched <- pData(filtered_eset)[corrected_sample_ids, ]
-
 luad_samples_final <- metadata_matched$dataset == "TCGA_LUAD"
 gtex_samples_final <- metadata_matched$dataset == "GTEX_LUNG"
-
 luad_corrected_expr <- logtpm_corrected[, luad_samples_final]
 gtex_corrected_expr <- logtpm_corrected[, gtex_samples_final]
-
-
-# -----------------------------------------------
-# Step B: Resolve the Ensembl ID version number issue (PANDA error cause)
-# -----------------------------------------------
-
-# Use the simplest sub function to remove the dot and everything after it
 rownames(luad_corrected_expr) <- sub("\\..*", "", rownames(luad_corrected_expr))
 rownames(gtex_corrected_expr) <- sub("\\..*", "", rownames(gtex_corrected_expr))
-
-
-# -----------------------------------------------
-# Step C: Format and resave the files
-# -----------------------------------------------
-
-# Format and save the LUAD file
 luad_panda_df <- as.data.frame(luad_corrected_expr)
 luad_panda_df$ID <- rownames(luad_panda_df)
-luad_panda_df <- luad_panda_df[, c(ncol(luad_panda_df), 1:(ncol(luad_panda_df)-1))] # Move ID column to the first position
-
+luad_panda_df <- luad_panda_df[, c(ncol(luad_panda_df), 1:(ncol(luad_panda_df)-1))] 
 write.table(
   luad_panda_df,
   file = "luad_corrected_expression_final.txt",
@@ -272,8 +241,6 @@ write.table(
   quote = FALSE,
   row.names = FALSE # Ensure R's internal row names are not written
 )
-
-# Format and save the GTEx file
 gtex_panda_df <- as.data.frame(gtex_corrected_expr)
 gtex_panda_df$ID <- rownames(gtex_panda_df)
 gtex_panda_df <- gtex_panda_df[, c(ncol(gtex_panda_df), 1:(ncol(gtex_panda_df)-1))]
@@ -285,20 +252,10 @@ write.table(
   quote = FALSE,
   row.names = FALSE
 )
-
-# --- Files have been resaved ---
-
-
-# --- Specific fix for GTEx file writing (using the most robust data.frame method) ---
-
-# 1. Reformat the GTEx data frame (using explicit column definition, no index reordering needed)
-# Ensure the ID column is the first column and only appears once.
 gtex_panda_df_fixed <- data.frame(
-  ID = rownames(gtex_corrected_expr), # Explicitly define the ID column
-  as.data.frame(gtex_corrected_expr) # Followed by expression values for all samples
+  ID = rownames(gtex_corrected_expr),
+  as.data.frame(gtex_corrected_expr) 
 )
-
-# 2. Overwrite and save the GTEx file
 write.table(
   gtex_panda_df_fixed,
   file = "gtex_corrected_expression_final.txt",
@@ -309,14 +266,15 @@ write.table(
 ```
 
 ## Principle Component Analysis
+This code performs principal component analysis (PCA) on the filtered LUAD–GTEx expression dataset before and after batch correction using log-TPM and normalized log-TPM values, respectively. It visualizes the first two principal components colored by dataset to assess batch effects and correction effectiveness, annotating each axis with the variance explained. Finally, the processed ExpressionSet is saved to disk for downstream analyses.
 ```{r, warning=FALSE, message=FALSE}
 library(ggfortify)
 library(limma)
 library(ggplot2)
 # PCA before batch correction
-PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["log_tpm"]]))
+PCA_filter_prebatch <- prcomp(t(assayData(filtered_eset)[["count"]]))
 # PCA after batch correction
-PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["norm_logtpm"]]))
+PCA_filter_postbatch <- prcomp(t(assayData(filtered_eset)[["logtpm"]]))
 
 
 #autoplot(PCA_filter_prebatch, data=pData(filtered_eset), colour="study",
@@ -473,7 +431,7 @@ Hierarchical clustering was performed using average linkage.
 Expression values were Z-score standardized across samples prior to clustering.
 ```{r pressure, echo=FALSE}
 ### 1. Extract expression matrix
-expr_mat <- assayData(filtered_eset)[["norm_logtpm"]]
+expr_mat <- assayData(filtered_eset)[["logtpm"]]
 
 # Drop zero-variance genes
 expr_mat <- expr_mat[apply(expr_mat, 1, var) > 0, ]
@@ -540,7 +498,7 @@ pd$age_cat   <- factor(pd$age_cat)
 pd$smoking   <- factor(pd$smoking)
 pd$hist_type <- factor(pd$hist_type)
 pd$dataset   <- factor(pd$dataset)
-expr <- assayData(filtered_eset)[["norm_logtpm"]]
+#expr <- assayData(filtered_eset)[["norm_logtpm"]]
 mad_vals <- apply(expr, 1, mad)
 top_genes <- names(sort(mad_vals, decreasing = TRUE))[1:50]
 expr_top <- expr[top_genes, ]
@@ -577,7 +535,7 @@ autoplot(
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-expr <- assayData(filtered_eset)[["norm_logtpm"]]
+expr <- assayData(filtered_eset)[["logtpm"]]
 
 # All genes by MAD
 mad_vals <- apply(expr, 1, mad)
@@ -664,59 +622,65 @@ table(coldata$group)
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-colnames(coldata)
-table(coldata$age_cat, coldata$dataset)
-#check numbers
-table(coldata$dataset, is.na(coldata$sex))
-table(coldata$dataset, is.na(coldata$age_cat))
+# Extract counts and metadata
+countdata <- assayData(filtered_eset)$counts
+coldata   <- as.data.frame(pData(filtered_eset))
 
-# Generate Table 1
+# Define tumor vs normal
+coldata$group <- factor(
+  ifelse(coldata$dataset == "TCGA_LUAD", "tumor", "normal"),
+  levels = c("normal", "tumor")
+)
+
+# Harmonize sex
+coldata$sex <- ifelse(
+  coldata$dataset == "GTEX_LUNG",
+  ifelse(coldata$gtex.sex == 1, "MALE", "FEMALE"),
+  coldata$tcga.cgc_case_gender
+)
+coldata$sex <- factor(coldata$sex, levels = c("FEMALE", "MALE"))
+
+# Harmonize age bins
+age_levels <- c("20-29","30-39","40-49","50-59","60-69","70-79","80-89")
+tcga_bins <- cut(
+  coldata$tcga.cgc_case_age_at_diagnosis,
+  breaks = c(20,30,40,50,60,70,80,90),
+  labels = age_levels,
+  right = FALSE
+)
+
+coldata$age_bin <- factor(
+  ifelse(coldata$dataset == "GTEx_LUNG", coldata$gtex.age, as.character(tcga_bins)),
+  levels = age_levels
+)
+
+# Keep complete cases for design variables
+design_vars <- c("sex", "age_bin", "group")
+keep <- complete.cases(coldata[, design_vars])
+
+coldata_filt   <- coldata[keep, ]
+countdata_filt <- countdata[, keep]
+stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
+
+# Table 1 summaries
 table(coldata_filt$dataset, coldata_filt$sex)
 table(coldata_filt$dataset, coldata_filt$age_bin)
 
-bin_medians <- c(
-  "20-29" = 25,
-  "30-39" = 35,
-  "40-49" = 45,
-  "50-59" = 55,
-  "60-69" = 65,
-  "70-79" = 75,
-  "80-89" = 85
-)
+# Numeric age summary
+bin_medians <- c("20-29"=25,"30-39"=35,"40-49"=45,"50-59"=55,
+                 "60-69"=65,"70-79"=75,"80-89"=85)
 
-coldata$age_num <- bin_medians[ as.character(coldata$age_bin) ]
-age_summary_by_group <- coldata %>%
-  group_by(group) %>%
-  summarise(
+coldata_filt$age_num <- bin_medians[as.character(coldata_filt$age_bin)]
+
+age_summary_by_group <- coldata_filt |>
+  dplyr::group_by(group) |>
+  dplyr::summarise(
     n = sum(!is.na(age_num)),
     mean_age = mean(age_num, na.rm = TRUE),
     sd_age = sd(age_num, na.rm = TRUE)
   )
-kable(
-  age_summary_by_group,
-  caption = "Mean (SD) Age by Tumor Status"
-)
-```
 
-```{r, warning=FALSE, message=FALSE}
-# drop 20 samples with missing covariates
-vars_for_design <- c("sex", "age_cat", "group")
-
-keep <- complete.cases(coldata[, vars_for_design])
-table(keep)  
-
-coldata_filt   <- coldata[keep, ]
-countdata_filt <- countdata[, keep]
-
-for (v in vars_for_design) {
-  if (is.factor(coldata_filt[[v]]) && is.ordered(coldata_filt[[v]])) {
-    message(sprintf("Converting ordered factor '%s' to nominal factor", v))
-    coldata_filt[[v]] <- factor(coldata_filt[[v]], ordered = FALSE)
-  }
-}
-
-# sanity check
-stopifnot(all(colnames(countdata_filt) == rownames(coldata_filt)))
+knitr::kable(age_summary_by_group, caption = "Mean (SD) Age by Tumor Status")
 
 dds <- DESeqDataSetFromMatrix(
   countData = round(countdata_filt),
@@ -1076,7 +1040,7 @@ vennDiagram(venn_mat_strict, main = "DESeq2 vs limma-voom (FDR<0.05 & |log2FC|>2
 ## PCA DEA genes - padj \< 0.1
 
 ```{r}
-expr_mat <- assayData(filtered_eset)$norm_logtpm  #batch-corrected matrix
+expr_mat <- assayData(filtered_eset)$logtpm  #batch-corrected matrix
 expr_mat <- as.matrix(expr_mat)
 deg_ids <- rownames(de_eset)   
 deg_ids <- intersect(deg_ids, rownames(expr_mat))
@@ -1203,7 +1167,7 @@ pd$smoking   <- factor(pd$smoking)
 pd$hist_type <- factor(pd$hist_type)
 pd$dataset   <- factor(pd$dataset)
 
-expr <- assayData(filtered_eset)[["norm_logtpm"]]
+expr <- assayData(filtered_eset)[["logtpm"]]
 
 # restrict to DEG module
 deg_mod <- intersect(deg_ids, rownames(expr))
