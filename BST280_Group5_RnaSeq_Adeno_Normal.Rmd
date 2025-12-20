@@ -1497,6 +1497,8 @@ library(googledrive)
 
 ## Import PANDA edge lists
 ```{r}
+filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
+
 folder_url <- "https://drive.google.com/drive/folders/1S8QpY-h28HXIjFvx6uUkkurzDkBlJ3KT"
 folder <- drive_get(as_id(folder_url))
 files <- drive_ls(folder)
