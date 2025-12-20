@@ -327,6 +327,14 @@ saveRDS(filtered_eset, file = "luad_gtex_eset_1207.rds")
 #filtered_eset <- readRDS("luad_gtex_eset_1207.rds")
 ```
 
+```{r}
+knitr::include_graphics("figures/pca_pre_log.png")
+```
+
+
+```{r}
+knitr::include_graphics("figures/pca_post_log.png")
+```
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 pc_pre  <- PCA_filter_prebatch$x[,1]
@@ -368,6 +376,11 @@ head(
 )
 ```
 
+```{r}
+knitr::include_graphics("figures/pc1_gene_list.png")
+```
+
+
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 tissue <- pData(filtered_eset)$hist_type
 
@@ -386,6 +399,11 @@ legend(
   pt.cex = 0.5
 )
 ```
+
+```{r}
+knitr::include_graphics("figures/pca_hist.png")
+```
+
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 sex <- pData(filtered_eset)$sex
@@ -410,6 +428,11 @@ legend(
 )
 ```
 
+```{r}
+knitr::include_graphics("figures/pcd_sex.png")
+```
+
+
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
 age_cat <- pData(filtered_eset)$age_cat
 
@@ -433,6 +456,11 @@ legend(
   pt.cex = 0.55
 )
 ```
+
+```{r}
+knitr::include_graphics("figures/pca_age.png")
+```
+
 ## Clustering Analysis 
 
 ### Hierrchical clustering
@@ -596,6 +624,10 @@ ggplot(pca_df, aes(PC1, PC2, color = cluster, shape = dataset)) +
   geom_point(size = 3, alpha = 0.8) +
   theme_classic() +
   labs(title = "k-means clustering of RNA-seq samples")
+```
+
+```{r}
+knitr::include_graphics("figures/kmean_clust_pca.png")
 ```
 
 ```{r, warning=FALSE, message=FALSE, eval=FALSE}
@@ -1940,7 +1972,7 @@ Across PANDA networks built from LUAD and GTEx lung, we observed substantial reg
 Functionally, rewired TF programs showed enrichment of pathways consistent with LUAD biology, including oncogenic and growth-factor signaling (e.g., ERBB/MAPK/mTOR/WNT), cell-cycle control, and DNA repair/replication, suggesting coordinated shifts in regulatory influence toward proliferative and survival programs. In parallel, several TF–pathway associations showed reduced targeting for immune and tissue homeostasis-related processes, consistent with disruption of normal lung regulatory programs and potential immune evasion. Together, these results suggest that LUAD pathogenesis involves not only expression changes but also reorganization of regulatory influence across TF–gene connections.
 
 ## Focusing on one gene: EGFR
-```{r}
+```{r, eval=FALSE}
 ## -----------------------------
 ## EGFR: TF->gene rewiring table
 ## -----------------------------
